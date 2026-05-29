@@ -105,7 +105,7 @@ private val CAPABILITIES = listOf(
     Capability(Lucide.Camera, "Cámara", false),
     Capability(Lucide.MapPin, "Ubicación", false),
     Capability(Lucide.MessageSquare, "SMS", false),
-    Capability(Lucide.Mic, "Voz", false),
+    Capability(Lucide.Mic, "Voz", true),
 )
 
 private data class Provider(val name: String, val envKey: String)

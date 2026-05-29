@@ -20,6 +20,7 @@ import com.chaquo.python.Python
 class AgentService : Service() {
 
     private var wakeLock: PowerManager.WakeLock? = null
+    private var bridge: com.indagalab.agentos.bridge.AndroidBridge? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -35,6 +36,7 @@ class AgentService : Service() {
             startForeground(NOTIF_ID, buildNotification())
         }
         acquireWakeLock()
+        startBridge()
 
         if (token.isNotBlank()) {
             try {
@@ -53,6 +55,7 @@ class AgentService : Service() {
             Python.getInstance().getModule("jarvis").callAttr("stop")
         } catch (_: Exception) { /* runtime may already be gone */ }
         AgentState.running.value = false
+        bridge?.shutdown(); bridge = null
         wakeLock?.let { if (it.isHeld) it.release() }
         wakeLock = null
         super.onDestroy()
@@ -71,6 +74,17 @@ class AgentService : Service() {
             if (k.isNotEmpty() && k != "TELEGRAM_TOKEN") o.put(k, v)
         }
         return o.toString()
+    }
+
+    private fun startBridge() {
+        if (bridge == null) {
+            try {
+                bridge = com.indagalab.agentos.bridge.AndroidBridge(applicationContext).also { it.start() }
+                android.util.Log.i(TAG, "AndroidBridge escuchando en 127.0.0.1:8765")
+            } catch (e: Exception) {
+                android.util.Log.e(TAG, "No se pudo iniciar el bridge: ${e.message}", e)
+            }
+        }
     }
 
     private fun acquireWakeLock() {

@@ -72,6 +72,7 @@ dependencies {
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
     implementation(libs.composables.lucide)   // iconos Lucide para Compose
+    implementation("org.nanohttpd:nanohttpd:2.3.1")  // AndroidBridge: HTTP localhost para el agente
 
     debugImplementation(libs.androidx.ui.tooling)
 }
