@@ -4,8 +4,19 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -49,6 +60,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -481,37 +493,73 @@ private fun DetailRow(label: String, value: String) {
 // ---------- bienvenida / onboarding ----------
 @Composable
 private fun WelcomeScreen(onStart: () -> Unit) {
-    Column(
-        Modifier.fillMaxSize().padding(28.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(14.dp),
+    var show by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { show = true }
+    val infinite = rememberInfiniteTransition(label = "float")
+    val floatY by infinite.animateFloat(
+        initialValue = 0f, targetValue = -12f,
+        animationSpec = infiniteRepeatable(tween(1900), RepeatMode.Reverse), label = "y",
+    )
+    val feats = listOf(
+        Triple(Lucide.Bot, "IA conversacional", "Las mejores IAs, gratis"),
+        Triple(Lucide.ShieldCheck, "Privado · sin Google", "Corre en tu propio dispositivo"),
+        Triple(Lucide.Zap, "Superpoderes", "Cámara, GPS, recordatorios y más"),
+    )
+
+    Box(
+        Modifier.fillMaxSize().background(
+            Brush.verticalGradient(
+                listOf(
+                    MaterialTheme.colorScheme.background,
+                    MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
+                ),
+            ),
+        ),
     ) {
-        Spacer(Modifier.weight(1f))
-        Image(
-            painter = painterResource(R.mipmap.ic_launcher),
-            contentDescription = null,
-            modifier = Modifier.size(112.dp).clip(RoundedCornerShape(28.dp)),
-        )
-        Text("AgentOS", style = MaterialTheme.typography.headlineLarge)
-        Text(
-            "Tu agente de IA personal,\n24/7 en tu teléfono, por Telegram.",
-            style = MaterialTheme.typography.bodyLarge,
-            textAlign = TextAlign.Center,
-            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f),
-        )
-        Spacer(Modifier.size(18.dp))
-        WelcomeFeature(Lucide.Bot, "IA conversacional", "Las mejores IAs, gratis")
-        WelcomeFeature(Lucide.ShieldCheck, "Privado · sin Google", "Corre en tu propio dispositivo")
-        WelcomeFeature(Lucide.Zap, "Superpoderes", "Cámara, GPS, recordatorios y más")
-        Spacer(Modifier.weight(1f))
-        Button(onClick = onStart, modifier = Modifier.fillMaxWidth().height(56.dp)) {
-            Text("Comenzar", style = MaterialTheme.typography.titleMedium)
+        Column(
+            Modifier.fillMaxSize().padding(28.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Spacer(Modifier.weight(1f))
+            AnimatedVisibility(show, enter = fadeIn(tween(800)) + scaleIn(initialScale = 0.6f, animationSpec = tween(800))) {
+                Image(
+                    painter = painterResource(R.mipmap.ic_launcher),
+                    contentDescription = null,
+                    modifier = Modifier.size(118.dp).offset(y = floatY.dp).clip(RoundedCornerShape(30.dp)),
+                )
+            }
+            AnimatedVisibility(show, enter = fadeIn(tween(700, 200)) + slideInVertically { it / 3 }) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("AgentOS", style = MaterialTheme.typography.headlineLarge)
+                    Text(
+                        "Tu agente de IA personal,\n24/7 en tu teléfono, por Telegram.",
+                        style = MaterialTheme.typography.bodyLarge,
+                        textAlign = TextAlign.Center,
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f),
+                    )
+                }
+            }
+            Spacer(Modifier.size(12.dp))
+            feats.forEachIndexed { i, (icon, t, s) ->
+                AnimatedVisibility(show, enter = fadeIn(tween(600, 350 + i * 160)) + slideInHorizontally { it / 3 }) {
+                    WelcomeFeature(icon, t, s)
+                }
+            }
+            Spacer(Modifier.weight(1f))
+            AnimatedVisibility(show, enter = fadeIn(tween(700, 850)) + slideInVertically { it / 2 }) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Button(onClick = onStart, modifier = Modifier.fillMaxWidth().height(56.dp)) {
+                        Text("Comenzar", style = MaterialTheme.typography.titleMedium)
+                    }
+                    Text(
+                        "by Indaga Lab",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
+                    )
+                }
+            }
         }
-        Text(
-            "by Indaga Lab",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
-        )
     }
 }
 
