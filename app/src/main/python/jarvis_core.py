@@ -26,6 +26,14 @@ def load_env():
 ENV = load_env()
 TG_TOKEN = ENV.get("TELEGRAM_TOKEN", "")
 OWNER_ID = ENV.get("OWNER_ID", "").strip()
+if not OWNER_ID:
+    # dueño auto-asignado en un arranque previo (persistido)
+    try:
+        _ownf = os.path.join(HERE, "owner.txt")
+        if os.path.isfile(_ownf):
+            OWNER_ID = open(_ownf).read().strip()
+    except Exception:
+        pass
 TTS_VOICE = ENV.get("TTS_VOICE", "es-ES-AlvaroNeural")
 CITY = ENV.get("CITY", "Quito")
 BRIEF_HOUR = int(ENV.get("BRIEF_HOUR", "7"))
@@ -948,7 +956,7 @@ def handle(chat, uid, text):
         reply(chat, ans); return
     cmd, _, arg = text[1:].partition(" "); cmd = cmd.lower().split("@")[0]; arg = arg.strip()
     if not owner and cmd in OWNER_ONLY:
-        send(chat, "🔒 Ese poder es solo del dueño."); return
+        send(chat, f"🔒 Ese poder es solo del dueño. (Tu id: {chat} — el dueño puede autorizarte)"); return
     if not owner and cmd in ("permitir", "quitar", "briefing"):
         send(chat, "🔒 solo el dueño."); return
     if cmd in ("start", "help"): sendf(chat, HELP)
@@ -1708,6 +1716,14 @@ def main():
                 if not m: continue
                 chat = m["chat"]["id"]; uid = m.get("from", {}).get("id")
                 txt = m.get("text", "")
+                # Auto-asignar dueño: el primer chat que escribe (si nadie lo es) queda como dueño.
+                if not OWNER_ID:
+                    globals()["OWNER_ID"] = str(chat)
+                    try: open(os.path.join(HERE, "owner.txt"), "w").write(str(chat))
+                    except Exception: pass
+                    print("👑 Dueño auto-asignado:", chat)
+                    try: tg("sendMessage", chat_id=chat, text="👑 Listo, te asigné como dueño de este agente. Ya puedes usar cámara, ubicación, SMS, linterna y todo lo demás.")
+                    except Exception: pass
                 allow = (not OWNER_ID) or (str(chat) in allowed_ids())
                 if not allow and not txt.startswith("/id"):
                     send(chat, "🔒 Bot privado. Tu /id: " + str(chat)); continue
