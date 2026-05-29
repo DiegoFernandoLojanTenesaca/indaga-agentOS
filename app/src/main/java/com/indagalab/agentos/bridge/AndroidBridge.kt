@@ -72,6 +72,20 @@ class AndroidBridge(private val ctx: Context, port: Int = 8765) : NanoHTTPD("127
                     if (s != null && l != null) setVol(s, l)
                     ok(volJson())
                 }
+                "/camera" -> {
+                    val facing = if (p("facing") == "front") CameraCharacteristics.LENS_FACING_FRONT
+                    else CameraCharacteristics.LENS_FACING_BACK
+                    val path = p("path") ?: (ctx.filesDir.absolutePath + "/jarvis/cam.jpg")
+                    ok(CameraCapture.capture(ctx, facing, path))
+                }
+                "/logs" -> ok(
+                    JSONObject().put(
+                        "logs",
+                        runCatching {
+                            com.chaquo.python.Python.getInstance().getModule("jarvis").callAttr("get_logs").toString()
+                        }.getOrDefault(""),
+                    ).toString(),
+                )
                 else -> newFixedLengthResponse(Response.Status.NOT_FOUND, "application/json", """{"error":"not found"}""")
             }
         } catch (e: Exception) {

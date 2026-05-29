@@ -102,7 +102,7 @@ private val CAPABILITIES = listOf(
     Capability(Lucide.Cloud, "Clima", true),
     Capability(Lucide.Globe, "Búsqueda web", true),
     Capability(Lucide.FileText, "Leer PDFs", true),
-    Capability(Lucide.Camera, "Cámara", false),
+    Capability(Lucide.Camera, "Cámara", true),
     Capability(Lucide.MapPin, "Ubicación", true),
     Capability(Lucide.MessageSquare, "SMS", true),
     Capability(Lucide.Mic, "Voz", true),

@@ -115,6 +115,20 @@ def termux_shim(cmd, timeout=120):
                 return ""
             return _call("/volume")
 
+        if tool == "termux-camera-photo":
+            # termux-camera-photo -c <0|1> <ruta>  (0=trasera, 1=frontal/selfie)
+            facing, path, i = "back", "", 0
+            while i < len(args):
+                if args[i] == "-c":
+                    facing = "front" if (i + 1 < len(args) and args[i + 1] == "1") else "back"
+                    i += 2
+                    continue
+                path = args[i]
+                i += 1
+            if not path:
+                return "[bridge] falta la ruta de la foto"
+            return _call("/camera", {"facing": facing, "path": path}, timeout=15)
+
     except Exception as e:
         return "[bridge error: %s]" % e
 
