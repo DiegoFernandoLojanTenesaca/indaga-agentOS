@@ -1,0 +1,68 @@
+# ===== Android / Gradle =====
+*.apk
+*.aar
+*.ap_
+*.aab
+*.dex
+*.class
+bin/
+gen/
+out/
+release/
+.gradle/
+build/
+app/build/
+app/.cxx/
+obj/
+
+# SDK path local
+local.properties
+
+# ===== IDEs =====
+*.iml
+.idea/
+.vscode/
+.DS_Store
+.kotlin/
+
+# ===== Firmas — NUNCA commitear =====
+*.jks
+*.keystore
+*.pem
+*.p12
+*.p8
+*.bks
+signing.properties
+keystore.properties
+
+# ===== Secretos / API keys — NUNCA commitear =====
+.env
+.env.*
+!.env.example
+secrets.properties
+app/google-services.json
+
+# ===== Datos personales / runtime del agente =====
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+*.log
+.sms_seen
+# Capturas del agente (cámara, selfies, intrusos)
+cam*.jpg
+intruso*.jpg
+selfie*.jpg
+*.mp3
+*.wav
+
+# ===== Python =====
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# ===== Agent tooling =====
+.claude/
+.cursor/
+.mcp.json
