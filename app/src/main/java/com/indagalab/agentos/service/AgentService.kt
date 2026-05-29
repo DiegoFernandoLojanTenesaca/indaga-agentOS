@@ -24,7 +24,10 @@ class AgentService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        val token = intent?.getStringExtra(EXTRA_TOKEN).orEmpty()
+        // La config persistida (ConfigStore) es la fuente; los extras la sobreescriben si vienen.
+        val store = com.indagalab.agentos.data.ConfigStore(this)
+        val token = intent?.getStringExtra(EXTRA_TOKEN)?.takeIf { it.isNotBlank() } ?: store.token
+        val envBlob = intent?.getStringExtra(EXTRA_ENV) ?: store.envBlob
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             startForeground(NOTIF_ID, buildNotification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
@@ -35,7 +38,9 @@ class AgentService : Service() {
 
         if (token.isNotBlank()) {
             try {
-                Python.getInstance().getModule("jarvis").callAttr("start", token)
+                Python.getInstance().getModule("jarvis")
+                    .callAttr("start", buildConfigJson(token, envBlob))
+                AgentState.running.value = true
             } catch (e: Exception) {
                 android.util.Log.e(TAG, "Failed to start jarvis: ${e.message}", e)
             }
@@ -47,9 +52,25 @@ class AgentService : Service() {
         try {
             Python.getInstance().getModule("jarvis").callAttr("stop")
         } catch (_: Exception) { /* runtime may already be gone */ }
+        AgentState.running.value = false
         wakeLock?.let { if (it.isHeld) it.release() }
         wakeLock = null
         super.onDestroy()
+    }
+
+    /** JSON de config para jarvis.start(): AGENTOS_HOME + token + env vars (KEY=VALOR por línea). */
+    private fun buildConfigJson(token: String, envBlob: String): String {
+        val o = org.json.JSONObject()
+        o.put("AGENTOS_HOME", java.io.File(filesDir, "jarvis").absolutePath)
+        o.put("TELEGRAM_TOKEN", token)
+        envBlob.lineSequence().forEach { raw ->
+            val line = raw.trim()
+            if (line.isEmpty() || line.startsWith("#") || !line.contains("=")) return@forEach
+            val k = line.substringBefore("=").trim()
+            val v = line.substringAfter("=").trim()
+            if (k.isNotEmpty() && k != "TELEGRAM_TOKEN") o.put(k, v)
+        }
+        return o.toString()
     }
 
     private fun acquireWakeLock() {
@@ -77,6 +98,7 @@ class AgentService : Service() {
 
     companion object {
         const val EXTRA_TOKEN = "token"
+        const val EXTRA_ENV = "env"
         private const val TAG = "AgentService"
         private const val CHANNEL_ID = "agentos_service"
         private const val NOTIF_ID = 1

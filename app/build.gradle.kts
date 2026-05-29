@@ -13,8 +13,8 @@ android {
         applicationId = "com.indagalab.agentos"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0-phase0"
+        versionCode = 2
+        versionName = "0.2.0"
 
         // Chaquopy: limit to the ABIs we ship. P40 Lite is arm64-v8a.
         // Add "armeabi-v7a" later for very old phones (bigger APK).
@@ -54,9 +54,9 @@ chaquopy {
         // Must match major.minor of `version`. /usr/bin/python3.13 exists here.
         buildPython("/usr/bin/python3.13")
         pip {
-            // Validates the pip pipeline; jarvis.py (Phase 0) uses only stdlib,
-            // but Phase 1 will lean on requests.
             install("requests")
+            install("Pillow")   // jarvis_core.shrink() — comprime imágenes para la vision API
+            install("pypdf")    // jarvis_core.handle_document() — lectura de PDFs
         }
     }
 }
@@ -71,6 +71,7 @@ dependencies {
     implementation(libs.androidx.ui.graphics)
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
+    implementation(libs.composables.lucide)   // iconos Lucide para Compose
 
     debugImplementation(libs.androidx.ui.tooling)
 }

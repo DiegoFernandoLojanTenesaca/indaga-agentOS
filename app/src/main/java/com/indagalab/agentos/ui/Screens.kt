@@ -1,0 +1,407 @@
+package com.indagalab.agentos.ui
+
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
+import com.chaquo.python.Python
+import com.composables.icons.lucide.Bot
+import com.composables.icons.lucide.Cpu
+import com.composables.icons.lucide.House
+import com.composables.icons.lucide.Info
+import com.composables.icons.lucide.KeyRound
+import com.composables.icons.lucide.Lucide
+import com.composables.icons.lucide.Play
+import com.composables.icons.lucide.Save
+import com.composables.icons.lucide.ScrollText
+import com.composables.icons.lucide.Settings
+import com.composables.icons.lucide.ShieldCheck
+import com.composables.icons.lucide.Square
+import com.composables.icons.lucide.Trash2
+import com.indagalab.agentos.BuildConfig
+import com.indagalab.agentos.R
+import com.indagalab.agentos.data.ConfigStore
+import com.indagalab.agentos.service.AgentService
+import com.indagalab.agentos.service.AgentState
+import kotlinx.coroutines.delay
+
+private val Green = Color(0xFF16A34A)
+private val CONNECTED = Regex("Conectado como (@\\S+)")
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AppScaffold() {
+    val ctx = LocalContext.current
+    val store = remember { ConfigStore(ctx) }
+    var tab by remember { mutableStateOf(0) }
+    var token by remember { mutableStateOf(store.token) }
+    var env by remember { mutableStateOf(store.envBlob) }
+    var logs by remember { mutableStateOf("—") }
+    val running = AgentState.running.value
+    val botUser = CONNECTED.find(logs)?.groupValues?.getOrNull(1)
+
+    LaunchedEffect(Unit) {
+        while (true) {
+            logs = try {
+                Python.getInstance().getModule("jarvis").callAttr("get_logs").toString()
+            } catch (e: Exception) {
+                "(agente aún no iniciado)"
+            }
+            delay(1000)
+        }
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Image(
+                            painter = painterResource(R.mipmap.ic_launcher),
+                            contentDescription = null,
+                            modifier = Modifier.size(28.dp).clip(RoundedCornerShape(7.dp)),
+                        )
+                        Spacer(Modifier.size(10.dp))
+                        Text("AgentOS")
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    titleContentColor = MaterialTheme.colorScheme.onPrimary,
+                ),
+            )
+        },
+        bottomBar = {
+            NavigationBar {
+                NavigationBarItem(tab == 0, { tab = 0 }, { Icon(Lucide.House, null) }, label = { Text("Inicio") })
+                NavigationBarItem(tab == 1, { tab = 1 }, { Icon(Lucide.Settings, null) }, label = { Text("Config") })
+                NavigationBarItem(tab == 2, { tab = 2 }, { Icon(Lucide.ScrollText, null) }, label = { Text("Logs") })
+                NavigationBarItem(tab == 3, { tab = 3 }, { Icon(Lucide.Info, null) }, label = { Text("Acerca") })
+            }
+        },
+    ) { pad ->
+        Box(Modifier.padding(pad)) {
+            when (tab) {
+                0 -> HomeScreen(
+                    running = running,
+                    configured = token.isNotBlank(),
+                    botUser = botUser,
+                    onStart = { startAgent(ctx) },
+                    onStop = { stopAgent(ctx) },
+                )
+                1 -> ConfigScreen(
+                    token = token, env = env,
+                    onTokenChange = { token = it }, onEnvChange = { env = it },
+                    onSave = { store.token = token.trim(); store.envBlob = env.trim() },
+                )
+                2 -> LogsScreen(logs)
+                else -> AboutScreen()
+            }
+        }
+    }
+}
+
+@Composable
+private fun HomeScreen(
+    running: Boolean,
+    configured: Boolean,
+    botUser: String?,
+    onStart: () -> Unit,
+    onStop: () -> Unit,
+) {
+    Column(
+        Modifier.fillMaxSize().padding(20.dp).verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        ElevatedCard(Modifier.fillMaxWidth()) {
+            Column(
+                Modifier.fillMaxWidth().padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Box(
+                    Modifier.size(72.dp).clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(Lucide.Bot, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(40.dp))
+                }
+                StatusPill(running)
+                if (running && botUser != null) {
+                    Text("Conectado como $botUser", style = MaterialTheme.typography.titleSmall)
+                }
+                Text(
+                    when {
+                        running -> "Tu Jarvis corre 24/7 por Telegram"
+                        configured -> "Listo para iniciar"
+                        else -> "Configura tu bot en la pestaña Config"
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    textAlign = TextAlign.Center,
+                )
+            }
+        }
+
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            StatCard(Modifier.weight(1f), Lucide.Cpu, "Runtime", "Python 3.13")
+            StatCard(Modifier.weight(1f), Lucide.ShieldCheck, "Privacidad", "Sin Google")
+        }
+
+        if (running) {
+            OutlinedButton(onClick = onStop, modifier = Modifier.fillMaxWidth().height(52.dp)) {
+                Icon(Lucide.Square, null, Modifier.size(18.dp)); Spacer(Modifier.size(8.dp)); Text("Detener agente")
+            }
+        } else {
+            Button(onClick = onStart, enabled = configured, modifier = Modifier.fillMaxWidth().height(52.dp)) {
+                Icon(Lucide.Play, null, Modifier.size(18.dp)); Spacer(Modifier.size(8.dp)); Text("Iniciar agente")
+            }
+        }
+
+        InfoBanner(Lucide.ShieldCheck, "100% local · Python embebido (Chaquopy) · sin GMS/Firebase")
+    }
+}
+
+@Composable
+private fun ConfigScreen(
+    token: String,
+    env: String,
+    onTokenChange: (String) -> Unit,
+    onEnvChange: (String) -> Unit,
+    onSave: () -> Unit,
+) {
+    var saved by remember { mutableStateOf(false) }
+    Column(
+        Modifier.fillMaxSize().padding(20.dp).verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        SectionCard("Bot de Telegram", Lucide.Bot) {
+            OutlinedTextField(
+                value = token,
+                onValueChange = { onTokenChange(it); saved = false },
+                label = { Text("Bot Token") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Text("Lo da @BotFather en Telegram.", style = MaterialTheme.typography.bodySmall)
+        }
+        SectionCard("Variables y API keys", Lucide.KeyRound) {
+            OutlinedTextField(
+                value = env,
+                onValueChange = { onEnvChange(it); saved = false },
+                label = { Text("KEY=VALOR por línea") },
+                placeholder = { Text("OWNER_ID=...\nGROQ_API_KEY=...\nCITY=Loja") },
+                minLines = 6,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Text("OWNER_ID, GROQ_API_KEY, CEREBRAS_API_KEY, CITY… una por línea.", style = MaterialTheme.typography.bodySmall)
+        }
+        Button(onClick = { onSave(); saved = true }, modifier = Modifier.fillMaxWidth().height(52.dp)) {
+            Icon(Lucide.Save, null, Modifier.size(18.dp)); Spacer(Modifier.size(8.dp)); Text("Guardar configuración")
+        }
+        if (saved) {
+            Text("Guardado. Detén e inicia el agente para aplicar.", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodyMedium)
+        }
+        Text("Las claves se guardan solo en este dispositivo.", style = MaterialTheme.typography.bodySmall)
+    }
+}
+
+@Composable
+private fun LogsScreen(logs: String) {
+    val ctx = LocalContext.current
+    val scroll = rememberScrollState()
+    LaunchedEffect(logs) { scroll.scrollTo(scroll.maxValue) }
+    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(Lucide.ScrollText, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                Text("Logs del agente", style = MaterialTheme.typography.titleMedium)
+            }
+            IconButton(onClick = {
+                try { Python.getInstance().getModule("jarvis").callAttr("clear_logs") } catch (_: Exception) {}
+            }) {
+                Icon(Lucide.Trash2, contentDescription = "Limpiar", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        Surface(tonalElevation = 2.dp, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxSize()) {
+            Text(
+                logs,
+                modifier = Modifier.fillMaxSize().padding(12.dp).verticalScroll(scroll),
+                style = MaterialTheme.typography.bodySmall,
+                fontFamily = FontFamily.Monospace,
+            )
+        }
+    }
+}
+
+@Composable
+private fun AboutScreen() {
+    val ctx = LocalContext.current
+    Column(
+        Modifier.fillMaxSize().padding(20.dp).verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Image(
+                painter = painterResource(R.mipmap.ic_launcher),
+                contentDescription = null,
+                modifier = Modifier.size(72.dp).clip(RoundedCornerShape(18.dp)),
+            )
+            Text("AgentOS", style = MaterialTheme.typography.headlineSmall)
+            Text("v${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("by Indaga Lab", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        SectionCard("Qué es", Lucide.Bot) {
+            Text(
+                "Convierte cualquier Android sin Google en un agente de IA 24/7 por Telegram. " +
+                    "Tu bot Jarvis corre embebido con Python (Chaquopy), sin depender de Play Services ni Firebase.",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+        SectionCard("Detalles", Lucide.Cpu) {
+            DetailRow("Versión", BuildConfig.VERSION_NAME)
+            DetailRow("Paquete", "com.indagalab.agentos")
+            DetailRow("Runtime", "Python 3.13 · Chaquopy")
+            DetailRow("Mínimo", "Android 8 (API 26)")
+        }
+        FilledTonalButton(
+            onClick = {
+                runCatching {
+                    ctx.startActivity(
+                        Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/DiegoFernandoLojanTenesaca/indaga-agentOS"))
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                    )
+                }
+            },
+            modifier = Modifier.fillMaxWidth().height(50.dp),
+        ) {
+            Text("Ver en GitHub")
+        }
+        InfoBanner(Lucide.ShieldCheck, "Software libre · tus datos y claves nunca salen del dispositivo.")
+    }
+}
+
+// ---------- componentes ----------
+@Composable
+private fun StatusPill(running: Boolean) {
+    val c = if (running) Green else MaterialTheme.colorScheme.outline
+    Surface(color = c.copy(alpha = 0.15f), shape = RoundedCornerShape(50)) {
+        Row(
+            Modifier.padding(horizontal = 14.dp, vertical = 7.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(7.dp),
+        ) {
+            Box(Modifier.size(8.dp).clip(CircleShape).background(c))
+            Text(if (running) "ACTIVO" else "DETENIDO", color = c, style = MaterialTheme.typography.labelLarge)
+        }
+    }
+}
+
+@Composable
+private fun StatCard(modifier: Modifier, icon: ImageVector, label: String, value: String) {
+    Card(modifier, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+            Text(value, style = MaterialTheme.typography.titleMedium)
+            Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun SectionCard(title: String, icon: ImageVector, content: @Composable () -> Unit) {
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                Text(title, style = MaterialTheme.typography.titleMedium)
+            }
+            content()
+        }
+    }
+}
+
+@Composable
+private fun DetailRow(label: String, value: String) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value, style = MaterialTheme.typography.bodyMedium)
+    }
+}
+
+@Composable
+private fun InfoBanner(icon: ImageVector, text: String) {
+    Surface(
+        color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.15f),
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+            Text(text, style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+// ---------- acciones del servicio ----------
+private fun startAgent(ctx: Context) {
+    ContextCompat.startForegroundService(ctx, Intent(ctx, AgentService::class.java))
+}
+
+private fun stopAgent(ctx: Context) {
+    ctx.stopService(Intent(ctx, AgentService::class.java))
+    AgentState.running.value = false
+}

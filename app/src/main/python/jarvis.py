@@ -1,106 +1,105 @@
 """
-Jarvis — Phase 0 minimal agent.
+AgentOS — entrypoint del agente Jarvis (llamado desde AgentService en Kotlin).
 
-Pure-stdlib Telegram long-poll bot, designed to run embedded under Chaquopy
-inside the AgentOS Android app. No Google, no external services beyond the
-Telegram Bot API (HTTPS). Phase 1 will graft the full Jarvis core and wire the
-hardware layer to the AndroidBridge.
+API:
+    start(config) -> str   # config = JSON/dict: AGENTOS_HOME, TELEGRAM_TOKEN, *_API_KEY, OWNER_ID, CITY...
+    stop()        -> str
+    get_logs()    -> str   # últimas líneas para la pantalla de Logs
 
-Public API called from Kotlin (AgentService):
-    start(token) -> str   # spawns the poll loop on a daemon thread
-    stop()       -> str   # signals the loop to exit
-    get_logs()   -> str   # last ~50 log lines, for the in-app Logs view
+Flujo: inyecta la config en os.environ ANTES de importar jarvis_core (que lee el
+entorno al importarse), redirige stdout a un buffer en memoria (para la UI) y al
+logcat, y corre el long-poll de Telegram en un hilo daemon.
 """
-
+import os
+import sys
 import json
-import threading
 import time
-import urllib.parse
-import urllib.request
+import threading
+from collections import deque
 
-_stop = threading.Event()
+_log = deque(maxlen=400)
 _thread = None
-_log = []
-_lock = threading.Lock()
+_core = None
 
 
-def _logmsg(msg):
-    line = time.strftime("%H:%M:%S ") + str(msg)
-    with _lock:
-        _log.append(line)
-        if len(_log) > 200:
-            del _log[: len(_log) - 200]
-    print("[jarvis]", line)
+class _Tee:
+    """Duplica stdout: buffer en memoria (UI Logs) + stdout real (logcat)."""
+    def __init__(self, real):
+        self._real = real
+
+    def write(self, s):
+        try:
+            if s and s.strip():
+                _log.append(time.strftime("%H:%M:%S ") + s.rstrip("\n"))
+        except Exception:
+            pass
+        try:
+            if self._real:
+                self._real.write(s)
+        except Exception:
+            pass
+
+    def flush(self):
+        try:
+            if self._real:
+                self._real.flush()
+        except Exception:
+            pass
 
 
 def get_logs():
-    with _lock:
-        return "\n".join(_log[-50:]) if _log else "(sin logs todavía)"
+    return "\n".join(_log) if _log else "(sin logs todavía)"
 
 
-def _api(token, method, params=None, timeout=40):
-    url = "https://api.telegram.org/bot%s/%s" % (token, method)
-    data = urllib.parse.urlencode(params or {}).encode("utf-8")
-    req = urllib.request.Request(url, data=data)
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        return json.loads(resp.read().decode("utf-8"))
+def clear_logs():
+    _log.clear()
+    return "cleared"
 
 
-def _handle(text):
-    t = (text or "").strip()
-    if t.startswith("/start"):
-        return (
-            "👋 AgentOS vivo en tu Android (Fase 0).\n"
-            "Soy Jarvis, embebido con Python/Chaquopy, sin Google.\n"
-            "Escríbeme algo y te lo repito. Prueba /ping."
-        )
-    if t.startswith("/ping"):
-        return "pong 🏓"
-    if not t:
-        return "(mensaje vacío)"
-    return "🔁 " + t
-
-
-def _loop(token):
-    _logmsg("Bot iniciado, long-polling…")
+def _run():
     try:
-        me = _api(token, "getMe")
-        uname = me.get("result", {}).get("username", "?")
-        _logmsg("Conectado como @%s" % uname)
+        _core.main()
     except Exception as e:
-        _logmsg("Error getMe: %s" % e)
-
-    offset = 0
-    while not _stop.is_set():
-        try:
-            resp = _api(token, "getUpdates", {"offset": offset, "timeout": 30})
-            for upd in resp.get("result", []):
-                offset = upd["update_id"] + 1
-                msg = upd.get("message") or {}
-                chat = msg.get("chat", {}).get("id")
-                text = msg.get("text", "")
-                if chat is None:
-                    continue
-                _logmsg("<- %s" % text)
-                reply = _handle(text)
-                _api(token, "sendMessage", {"chat_id": chat, "text": reply})
-                _logmsg("-> %s" % reply)
-        except Exception as e:
-            _logmsg("loop err: %s" % e)
-            time.sleep(3)
-    _logmsg("Bot detenido.")
+        print("jarvis fatal:", e)
 
 
-def start(token):
-    global _thread
+def start(config):
+    global _thread, _core
     if _thread is not None and _thread.is_alive():
         return "already-running"
-    _stop.clear()
-    _thread = threading.Thread(target=_loop, args=(token,), daemon=True)
+
+    # 1) Config (token + API keys + AGENTOS_HOME) -> os.environ
+    try:
+        cfg = json.loads(config) if isinstance(config, str) else dict(config)
+    except Exception as e:
+        cfg = {}
+        _log.append("config inválida: %s" % e)
+    for k, v in cfg.items():
+        if v is not None and str(v) != "":
+            os.environ[str(k)] = str(v)
+
+    # 2) Capturar stdout/stderr para la pantalla de Logs
+    if not isinstance(sys.stdout, _Tee):
+        sys.stdout = _Tee(sys.__stdout__)
+        sys.stderr = _Tee(sys.__stderr__)
+
+    # 3) Importar el core DESPUÉS de poblar el entorno (lee env al importar)
+    import importlib
+    if _core is None:
+        _core = importlib.import_module("jarvis_core")
+    else:
+        importlib.reload(_core)
+
+    _core._STOP.clear()
+    _thread = threading.Thread(target=_run, daemon=True)
     _thread.start()
     return "started"
 
 
 def stop():
-    _stop.set()
+    try:
+        if _core is not None:
+            _core._STOP.set()
+    except Exception:
+        pass
     return "stopping"
