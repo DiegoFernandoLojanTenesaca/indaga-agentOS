@@ -14,18 +14,30 @@ import com.indagalab.agentos.ui.theme.AgentOSTheme
 
 class MainActivity : ComponentActivity() {
 
-    private val notifPerm =
-        registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    private val permLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
-            != PackageManager.PERMISSION_GRANTED
-        ) {
-            notifPerm.launch(Manifest.permission.POST_NOTIFICATIONS)
-        }
+        requestPermissions()
         setContent { AgentOSTheme { AppScaffold() } }
+    }
+
+    private fun requestPermissions() {
+        val wanted = buildList {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) add(Manifest.permission.POST_NOTIFICATIONS)
+            add(Manifest.permission.ACCESS_FINE_LOCATION)
+            add(Manifest.permission.CAMERA)
+            add(Manifest.permission.SEND_SMS)
+            add(Manifest.permission.READ_SMS)
+            add(Manifest.permission.CALL_PHONE)
+            add(Manifest.permission.RECORD_AUDIO)
+            add(Manifest.permission.READ_CONTACTS)
+        }
+        val missing = wanted.filter {
+            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
+        }
+        if (missing.isNotEmpty()) permLauncher.launch(missing.toTypedArray())
     }
 }

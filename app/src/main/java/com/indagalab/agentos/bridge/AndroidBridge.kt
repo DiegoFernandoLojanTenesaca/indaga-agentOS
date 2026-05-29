@@ -15,7 +15,16 @@ import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.speech.tts.TextToSpeech
+import android.Manifest
+import android.annotation.SuppressLint
+import android.content.pm.PackageManager
+import android.location.LocationManager
+import android.media.AudioManager
+import android.net.Uri
+import android.telephony.SmsManager
+import androidx.core.content.ContextCompat
 import fi.iki.elonen.NanoHTTPD
+import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Locale
 
@@ -50,6 +59,18 @@ class AndroidBridge(private val ctx: Context, port: Int = 8765) : NanoHTTPD("127
                     val set = p("set")
                     if (set != null) { setClip(set); ok("""{"ok":true}""") }
                     else ok(JSONObject().put("text", getClip()).toString())
+                }
+                "/gps" -> ok(gpsJson())
+                "/sms" -> {
+                    val to = p("to"); val msg = p("message")
+                    if (to != null && msg != null) { sendSms(to, msg); ok("""{"ok":true}""") }
+                    else ok(smsListJson(p("limit")?.toIntOrNull() ?: 10))
+                }
+                "/call" -> { call(p("number").orEmpty()); ok("""{"ok":true}""") }
+                "/volume" -> {
+                    val s = p("stream"); val l = p("level")?.toIntOrNull()
+                    if (s != null && l != null) setVol(s, l)
+                    ok(volJson())
                 }
                 else -> newFixedLengthResponse(Response.Status.NOT_FOUND, "application/json", """{"error":"not found"}""")
             }
@@ -125,6 +146,73 @@ class AndroidBridge(private val ctx: Context, port: Int = 8765) : NanoHTTPD("127
     private fun setClip(text: String) {
         val cb = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         cb.setPrimaryClip(ClipData.newPlainText("agentos", text))
+    }
+
+    private fun has(perm: String) =
+        ContextCompat.checkSelfPermission(ctx, perm) == PackageManager.PERMISSION_GRANTED
+
+    @SuppressLint("MissingPermission")
+    private fun gpsJson(): String {
+        if (!has(Manifest.permission.ACCESS_FINE_LOCATION) && !has(Manifest.permission.ACCESS_COARSE_LOCATION))
+            return """{"error":"sin permiso de ubicación"}"""
+        val lm = ctx.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        val loc = runCatching { lm.getLastKnownLocation(LocationManager.GPS_PROVIDER) }.getOrNull()
+            ?: runCatching { lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER) }.getOrNull()
+        return if (loc == null) """{"error":"sin ubicación reciente"}"""
+        else JSONObject().put("latitude", loc.latitude).put("longitude", loc.longitude)
+            .put("accuracy", loc.accuracy).put("provider", loc.provider).toString()
+    }
+
+    @Suppress("DEPRECATION")
+    private fun sendSms(to: String, msg: String) {
+        if (!has(Manifest.permission.SEND_SMS)) return
+        val sm = if (Build.VERSION.SDK_INT >= 31) ctx.getSystemService(SmsManager::class.java)
+        else SmsManager.getDefault()
+        sm.sendTextMessage(to, null, msg, null, null)
+    }
+
+    private fun smsListJson(limit: Int): String {
+        if (!has(Manifest.permission.READ_SMS)) return """{"error":"sin permiso de SMS"}"""
+        val arr = JSONArray()
+        ctx.contentResolver.query(
+            Uri.parse("content://sms/inbox"),
+            arrayOf("address", "body", "date"), null, null, "date DESC",
+        )?.use { c ->
+            var n = 0
+            while (c.moveToNext() && n < limit) {
+                arr.put(
+                    JSONObject().put("number", c.getString(0)).put("body", c.getString(1)).put("received", c.getLong(2)),
+                )
+                n++
+            }
+        }
+        return arr.toString()
+    }
+
+    private fun call(number: String) {
+        if (!has(Manifest.permission.CALL_PHONE) || number.isBlank()) return
+        ctx.startActivity(
+            Intent(Intent.ACTION_CALL, Uri.parse("tel:$number")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+    }
+
+    private fun volJson(): String {
+        val am = ctx.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        return JSONObject()
+            .put("music", am.getStreamVolume(AudioManager.STREAM_MUSIC))
+            .put("max", am.getStreamMaxVolume(AudioManager.STREAM_MUSIC))
+            .toString()
+    }
+
+    private fun setVol(stream: String, level: Int) {
+        val am = ctx.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        val s = when (stream) {
+            "alarm" -> AudioManager.STREAM_ALARM
+            "ring" -> AudioManager.STREAM_RING
+            "notification" -> AudioManager.STREAM_NOTIFICATION
+            else -> AudioManager.STREAM_MUSIC
+        }
+        am.setStreamVolume(s, level, 0)
     }
 
     fun shutdown() {

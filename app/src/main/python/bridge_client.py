@@ -83,6 +83,38 @@ def termux_shim(cmd, timeout=120):
             _call("/clipboard", {"set": " ".join(args)})
             return ""
 
+        if tool == "termux-location":
+            return _call("/gps")
+
+        if tool == "termux-sms-send":
+            num, text_parts, i = "", [], 0
+            while i < len(args):
+                if args[i] == "-n":
+                    num = args[i + 1] if i + 1 < len(args) else ""
+                    i += 2
+                    continue
+                text_parts.append(args[i])
+                i += 1
+            _call("/sms", {"to": num, "message": " ".join(text_parts)})
+            return ""
+
+        if tool == "termux-sms-list":
+            limit = "10"
+            if "-l" in args:
+                j = args.index("-l")
+                limit = args[j + 1] if j + 1 < len(args) else "10"
+            return _call("/sms", {"limit": limit})
+
+        if tool == "termux-telephony-call":
+            _call("/call", {"number": args[0] if args else ""})
+            return ""
+
+        if tool == "termux-volume":
+            if len(args) >= 2:
+                _call("/volume", {"stream": args[0], "level": args[1]})
+                return ""
+            return _call("/volume")
+
     except Exception as e:
         return "[bridge error: %s]" % e
 
