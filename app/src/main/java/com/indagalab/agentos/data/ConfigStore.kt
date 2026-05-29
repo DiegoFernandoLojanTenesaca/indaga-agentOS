@@ -23,4 +23,8 @@ class ConfigStore(context: Context) {
         set(v) { p.edit().putString("env", v).apply() }
 
     val configured: Boolean get() = token.isNotBlank()
+
+    var onboarded: Boolean
+        get() = p.getBoolean("onboarded", false)
+        set(v) { p.edit().putBoolean("onboarded", v).apply() }
 }

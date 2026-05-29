@@ -78,6 +78,7 @@ import com.composables.icons.lucide.Play
 import com.composables.icons.lucide.Save
 import com.composables.icons.lucide.ScrollText
 import com.composables.icons.lucide.Settings
+import com.composables.icons.lucide.ShieldCheck
 import com.composables.icons.lucide.Smartphone
 import com.composables.icons.lucide.Square
 import com.composables.icons.lucide.Trash2
@@ -125,6 +126,11 @@ private val PROVIDERS = listOf(
 fun AppScaffold() {
     val ctx = LocalContext.current
     val store = remember { ConfigStore(ctx) }
+    var onboarded by remember { mutableStateOf(store.onboarded) }
+    if (!onboarded) {
+        WelcomeScreen(onStart = { store.onboarded = true; onboarded = true })
+        return
+    }
     var tab by remember { mutableStateOf(0) }
     var token by remember { mutableStateOf(store.token) }
     var env by remember { mutableStateOf(store.envBlob) }
@@ -469,6 +475,64 @@ private fun DetailRow(label: String, value: String) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
         Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(value, style = MaterialTheme.typography.bodyMedium)
+    }
+}
+
+// ---------- bienvenida / onboarding ----------
+@Composable
+private fun WelcomeScreen(onStart: () -> Unit) {
+    Column(
+        Modifier.fillMaxSize().padding(28.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Spacer(Modifier.weight(1f))
+        Image(
+            painter = painterResource(R.mipmap.ic_launcher),
+            contentDescription = null,
+            modifier = Modifier.size(112.dp).clip(RoundedCornerShape(28.dp)),
+        )
+        Text("AgentOS", style = MaterialTheme.typography.headlineLarge)
+        Text(
+            "Tu agente de IA personal,\n24/7 en tu teléfono, por Telegram.",
+            style = MaterialTheme.typography.bodyLarge,
+            textAlign = TextAlign.Center,
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f),
+        )
+        Spacer(Modifier.size(18.dp))
+        WelcomeFeature(Lucide.Bot, "IA conversacional", "Las mejores IAs, gratis")
+        WelcomeFeature(Lucide.ShieldCheck, "Privado · sin Google", "Corre en tu propio dispositivo")
+        WelcomeFeature(Lucide.Zap, "Superpoderes", "Cámara, GPS, recordatorios y más")
+        Spacer(Modifier.weight(1f))
+        Button(onClick = onStart, modifier = Modifier.fillMaxWidth().height(56.dp)) {
+            Text("Comenzar", style = MaterialTheme.typography.titleMedium)
+        }
+        Text(
+            "by Indaga Lab",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
+        )
+    }
+}
+
+@Composable
+private fun WelcomeFeature(icon: ImageVector, title: String, subtitle: String) {
+    Row(
+        Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Box(
+            Modifier.size(44.dp).clip(CircleShape)
+                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
+        }
+        Column {
+            Text(title, style = MaterialTheme.typography.titleMedium)
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
     }
 }
 

@@ -1,11 +1,14 @@
 package com.indagalab.agentos.ui.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
 
 // Paleta de marca Indaga (cálida)
 private val Orange = Color(0xFFEA580C)
@@ -38,10 +41,20 @@ private val DarkColors = darkColorScheme(
     onSurface = Cream,
 )
 
+// Espíritu "Expressive": formas redondeadas pronunciadas (cards, botones, chips).
+private val ExpressiveShapes = Shapes(
+    extraSmall = RoundedCornerShape(10.dp),
+    small = RoundedCornerShape(16.dp),
+    medium = RoundedCornerShape(22.dp),
+    large = RoundedCornerShape(30.dp),
+    extraLarge = RoundedCornerShape(40.dp),
+)
+
 @Composable
 fun AgentOSTheme(content: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme = if (isSystemInDarkTheme()) DarkColors else LightColors,
+        shapes = ExpressiveShapes,
         content = content,
     )
 }
