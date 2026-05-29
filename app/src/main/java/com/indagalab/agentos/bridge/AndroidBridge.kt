@@ -19,14 +19,22 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.content.pm.PackageManager
 import android.location.LocationManager
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
 import android.media.AudioManager
+import android.media.MediaRecorder
 import android.net.Uri
 import android.telephony.SmsManager
 import androidx.core.content.ContextCompat
 import fi.iki.elonen.NanoHTTPD
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.File
 import java.util.Locale
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 /**
  * Puente HTTP local (127.0.0.1:8765) que expone el hardware del teléfono al
@@ -78,6 +86,8 @@ class AndroidBridge(private val ctx: Context, port: Int = 8765) : NanoHTTPD("127
                     val path = p("path") ?: (ctx.filesDir.absolutePath + "/jarvis/cam.jpg")
                     ok(CameraCapture.capture(ctx, facing, path))
                 }
+                "/mic" -> ok(recordMic(p("seconds")?.toIntOrNull() ?: 5, p("path") ?: (ctx.filesDir.absolutePath + "/jarvis/rec.m4a")))
+                "/sensors" -> if (p("list") != null) ok(sensorsList()) else ok(sensorRead(p("name") ?: "accelerometer"))
                 "/logs" -> ok(
                     JSONObject().put(
                         "logs",
@@ -164,6 +174,49 @@ class AndroidBridge(private val ctx: Context, port: Int = 8765) : NanoHTTPD("127
 
     private fun has(perm: String) =
         ContextCompat.checkSelfPermission(ctx, perm) == PackageManager.PERMISSION_GRANTED
+
+    @Suppress("DEPRECATION")
+    private fun recordMic(seconds: Int, path: String): String {
+        if (!has(Manifest.permission.RECORD_AUDIO)) return """{"error":"sin permiso de micrófono"}"""
+        val rec = if (Build.VERSION.SDK_INT >= 31) MediaRecorder(ctx) else MediaRecorder()
+        return try {
+            File(path).parentFile?.mkdirs()
+            rec.setAudioSource(MediaRecorder.AudioSource.MIC)
+            rec.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
+            rec.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+            rec.setOutputFile(path)
+            rec.prepare(); rec.start()
+            Thread.sleep(seconds.coerceIn(1, 60) * 1000L)
+            rec.stop()
+            """{"ok":true,"path":"$path","bytes":${File(path).length()}}"""
+        } catch (e: Exception) {
+            """{"error":"${e.message}"}"""
+        } finally {
+            runCatching { rec.release() }
+        }
+    }
+
+    private fun sensorsList(): String {
+        val sm = ctx.getSystemService(Context.SENSOR_SERVICE) as SensorManager
+        return JSONArray(sm.getSensorList(Sensor.TYPE_ALL).map { it.name }).toString()
+    }
+
+    private fun sensorRead(name: String): String {
+        val sm = ctx.getSystemService(Context.SENSOR_SERVICE) as SensorManager
+        val sensor = sm.getDefaultSensor(Sensor.TYPE_ACCELEROMETER) ?: return """{"error":"sin acelerómetro"}"""
+        val latch = CountDownLatch(1)
+        val vals = FloatArray(3)
+        val listener = object : SensorEventListener {
+            override fun onSensorChanged(e: SensorEvent) {
+                e.values.copyInto(vals, 0, 0, minOf(3, e.values.size)); latch.countDown()
+            }
+            override fun onAccuracyChanged(s: Sensor?, a: Int) {}
+        }
+        sm.registerListener(listener, sensor, SensorManager.SENSOR_DELAY_NORMAL)
+        latch.await(1500, TimeUnit.MILLISECONDS)
+        sm.unregisterListener(listener)
+        return JSONObject().put(name, JSONObject().put("values", JSONArray(listOf(vals[0], vals[1], vals[2])))).toString()
+    }
 
     @SuppressLint("MissingPermission")
     private fun gpsJson(): String {

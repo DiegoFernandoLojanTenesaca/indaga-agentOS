@@ -129,6 +129,24 @@ def termux_shim(cmd, timeout=120):
                 return "[bridge] falta la ruta de la foto"
             return _call("/camera", {"facing": facing, "path": path}, timeout=15)
 
+        if tool == "termux-microphone-record":
+            if "-q" in args:  # detener: grabamos síncrono, así que es no-op
+                return ""
+            secs, path = "5", ""
+            if "-l" in args:
+                k = args.index("-l"); secs = args[k + 1] if k + 1 < len(args) else "5"
+            if "-f" in args:
+                k = args.index("-f"); path = args[k + 1] if k + 1 < len(args) else ""
+            return _call("/mic", {"seconds": secs, "path": path}, timeout=int(secs) + 15)
+
+        if tool == "termux-sensor":
+            if "-l" in args:
+                return _call("/sensors", {"list": "1"})
+            name = "accelerometer"
+            if "-s" in args:
+                k = args.index("-s"); name = args[k + 1] if k + 1 < len(args) else "accelerometer"
+            return _call("/sensors", {"name": name})
+
     except Exception as e:
         return "[bridge error: %s]" % e
 
