@@ -902,16 +902,7 @@ private fun WelcomeScreen(onStart: () -> Unit) {
         Triple(Lucide.Zap, "Superpoderes", "Cámara, GPS, recordatorios y más"),
     )
 
-    Box(
-        Modifier.fillMaxSize().background(
-            Brush.verticalGradient(
-                listOf(
-                    MaterialTheme.colorScheme.background,
-                    MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
-                ),
-            ),
-        ),
-    ) {
+    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         Column(
             Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()
                 .verticalScroll(rememberScrollState()).padding(28.dp),

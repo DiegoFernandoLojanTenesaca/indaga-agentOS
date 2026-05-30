@@ -272,12 +272,24 @@ def shrink(path, maxpx=1024, q=72):
     except Exception:
         return path
 
+def clean_for_tts(t):
+    """Limpia el texto para que el TTS NO lea símbolos (barra, guión, asterisco…)."""
+    t = str(t)
+    t = re.sub(r'https?://\S+', '', t)              # quitar URLs
+    t = re.sub(r'[*_`#~|<>=\[\]{}()]', ' ', t)      # markdown y símbolos
+    t = t.replace('/', ' ').replace('\\', ' ')       # barras
+    t = re.sub(r'(?:^|\s)[-–—]+(?:\s|$)', ' ', t)    # guiones sueltos / viñetas
+    t = t.replace('¿', '').replace('¡', '')
+    t = t.replace('?', '.').replace('!', '.')         # evita "signo de pregunta"
+    t = re.sub(r'\s+', ' ', t).strip()
+    return t
+
 def speak(chat, text):
     """Modo /voz: además del texto, lo dice por el ALTAVOZ del teléfono vía el
     bridge /tts (TTS nativo offline, sin Google). Devuelve False para que reply()
     igual envíe el texto a Telegram (el usuario remoto necesita leerlo)."""
     try:
-        sh("termux-tts-speak %s" % json.dumps(str(text)[:1500]), timeout=40)
+        sh("termux-tts-speak %s" % json.dumps(clean_for_tts(text)[:1500]), timeout=40)
     except Exception as e:
         print("speak:", e)
     return False
@@ -423,7 +435,7 @@ def welcome_voice():
     def _say():
         try:
             time.sleep(2)  # dar tiempo a que el motor TTS del bridge termine de iniciar
-            sh("termux-tts-speak %s" % json.dumps(phrase), timeout=30)
+            sh("termux-tts-speak %s" % json.dumps(clean_for_tts(phrase)), timeout=30)
         except Exception as e:
             print("welcome_voice:", e)
     threading.Thread(target=_say, daemon=True).start()
@@ -619,14 +631,17 @@ def _sms_id(s):
 
 def _sms_seen_load():
     try:
-        return set(int(x) for x in open(_SMS_LAST_FILE).read().split() if x.strip().lstrip("-").isdigit())
+        with open(_SMS_LAST_FILE) as _f:
+            return set(int(x) for x in _f.read().split() if x.strip().lstrip("-").isdigit())
     except Exception:
         return set()
 
 def _sms_seen_save(seen):
     # cap: mantener últimos 300 para que no crezca infinito
     if len(seen) > 300: seen = set(list(seen)[-300:])
-    try: open(_SMS_LAST_FILE, "w").write("\n".join(str(x) for x in seen))
+    try:
+        with open(_SMS_LAST_FILE, "w") as _f:
+            _f.write("\n".join(str(x) for x in seen))
     except Exception as e: print("sms_seen_save:", e)
 
 def get_sms(n=5, kind="inbox"):
@@ -915,7 +930,8 @@ def check_monitor():
             MON["temp"] = now; maybe_silenciar(OWNER_ID, f"🌡️ Temperatura alta: {temp}°C")
     except Exception: pass
     try:
-        m = {ln.split(':')[0]: int(ln.split()[1]) for ln in open('/proc/meminfo') if ':' in ln}
+        with open('/proc/meminfo') as _mf:
+            m = {ln.split(':')[0]: int(ln.split()[1]) for ln in _mf if ':' in ln}
         if m['MemAvailable'] // 1024 < 250 and now - MON["ram"] > 1800:
             MON["ram"] = now; maybe_silenciar(OWNER_ID, f"⚠️ RAM baja: {m['MemAvailable']//1024} MB")
     except Exception: pass
@@ -970,7 +986,8 @@ def cmd_status(chat):
          f"📈 Tokens: {ti} in + {to} out = <b>{ti+to}</b> | {tr} peticiones",
          f"⏱️ Uptime: {up//3600}h {(up%3600)//60}m | 👥 permitidos: {len(allowed_ids())}"]
     try:
-        m = {ln.split(':')[0]: int(ln.split()[1]) for ln in open('/proc/meminfo') if ':' in ln}
+        with open('/proc/meminfo') as _mf:
+            m = {ln.split(':')[0]: int(ln.split()[1]) for ln in _mf if ':' in ln}
         h.append(f"💾 RAM libre: {m['MemAvailable']//1024}/{m['MemTotal']//1024} MB")
     except Exception: pass
     sendf(chat, "\n".join(h))
@@ -1068,7 +1085,7 @@ def handle(chat, uid, text):
     elif cmd == "linterna": sh(f"termux-torch {'on' if arg=='on' else 'off'}"); send(chat, f"🔦 {arg or 'off'}")
     elif cmd == "diga":
         if not arg: send(chat, "uso: /diga <texto>"); return
-        sh("termux-tts-speak %s" % json.dumps(arg), timeout=40); send(chat, "🔊 dicho")
+        sh("termux-tts-speak %s" % json.dumps(clean_for_tts(arg)), timeout=40); send(chat, "🔊 dicho")
     elif cmd == "escucha":
         secs = arg if arg.isdigit() else "10"; f = os.path.join(HERE, "rec.m4a")
         try: os.remove(f)
@@ -1783,7 +1800,9 @@ def main():
                 # Auto-asignar dueño: el primer chat que escribe (si nadie lo es) queda como dueño.
                 if not OWNER_ID:
                     globals()["OWNER_ID"] = str(chat)
-                    try: open(os.path.join(HERE, "owner.txt"), "w").write(str(chat))
+                    try:
+                        with open(os.path.join(HERE, "owner.txt"), "w") as _f:
+                            _f.write(str(chat))
                     except Exception: pass
                     print("👑 Dueño auto-asignado:", chat)
                     try: tg("sendMessage", chat_id=chat, text="👑 Listo, te asigné como dueño de este agente. Ya puedes usar cámara, ubicación, SMS, linterna y todo lo demás.")

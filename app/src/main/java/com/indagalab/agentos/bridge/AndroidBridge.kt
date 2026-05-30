@@ -50,7 +50,18 @@ class AndroidBridge(private val ctx: Context, port: Int = 8765) : NanoHTTPD("127
     private var notifId = 1000
     private val tts: TextToSpeech = TextToSpeech(ctx.applicationContext) { status ->
         ttsReady = status == TextToSpeech.SUCCESS
-        if (ttsReady) tts?.language = Locale("es", "ES")
+        if (ttsReady) {
+            tts?.language = Locale("es", "ES")
+            // Preferir una voz MASCULINA en español si el motor la tiene.
+            runCatching {
+                val male = tts?.voices?.firstOrNull { v ->
+                    v.locale.language == "es" &&
+                        v.name.contains("male", true) && !v.name.contains("female", true)
+                }
+                if (male != null) tts?.voice = male
+            }
+            tts?.setPitch(0.9f) // un poco más grave
+        }
     }
 
     override fun serve(session: IHTTPSession): Response {
