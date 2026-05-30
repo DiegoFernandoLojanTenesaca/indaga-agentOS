@@ -14,6 +14,9 @@
     <img src="https://img.shields.io/badge/Cero-Google-EA4335?logo=google&logoColor=white" alt="Sin Google">
     <img src="https://img.shields.io/badge/Estado-Beta-orange" alt="Beta">
   </p>
+  <p>
+    <a href="https://github.com/DiegoFernandoLojanTenesaca/indaga-agentOS/releases/latest"><img src="https://img.shields.io/badge/Descargar_APK-v0.2.0--beta-9945FF?style=for-the-badge&logo=android&logoColor=white" alt="Descargar APK"></a>
+  </p>
   <p><em>Producto de <strong>Indaga Lab</strong> · basado en el bot Jarvis</em></p>
 </div>
 
