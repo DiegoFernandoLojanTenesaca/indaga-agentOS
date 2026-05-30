@@ -259,7 +259,7 @@ def sh(cmd, timeout=120):
     return (o.stdout + o.stderr).strip()
 
 def notify(title, content):
-    try: sh("termux-notification --title %s --content %s" % (json.dumps(title), json.dumps(content)), timeout=15)
+    try: sh("termux-notification --title %s --content %s" % (json.dumps(title, ensure_ascii=False), json.dumps(content, ensure_ascii=False)), timeout=15)
     except Exception as e: print("notify:", e)
 
 def shrink(path, maxpx=1024, q=72):
@@ -289,7 +289,7 @@ def speak(chat, text):
     bridge /tts (TTS nativo offline, sin Google). Devuelve False para que reply()
     igual envíe el texto a Telegram (el usuario remoto necesita leerlo)."""
     try:
-        sh("termux-tts-speak %s" % json.dumps(clean_for_tts(text)[:1500]), timeout=40)
+        sh("termux-tts-speak %s" % json.dumps(clean_for_tts(text)[:1500], ensure_ascii=False), timeout=40)
     except Exception as e:
         print("speak:", e)
     return False
@@ -435,7 +435,7 @@ def welcome_voice():
     def _say():
         try:
             time.sleep(2)  # dar tiempo a que el motor TTS del bridge termine de iniciar
-            sh("termux-tts-speak %s" % json.dumps(clean_for_tts(phrase)), timeout=30)
+            sh("termux-tts-speak %s" % json.dumps(clean_for_tts(phrase), ensure_ascii=False), timeout=30)
         except Exception as e:
             print("welcome_voice:", e)
     threading.Thread(target=_say, daemon=True).start()
@@ -686,7 +686,7 @@ def dispatch_msg(canal, destino, texto):
         except Exception as e: return False, f"tg err: {e}"
     if canal == "sms":
         try:
-            r = sh(f'termux-sms-send -n "{destino}" {json.dumps(texto)}', timeout=20)
+            r = sh(f'termux-sms-send -n "{destino}" {json.dumps(texto, ensure_ascii=False)}', timeout=20)
             return (not r), (r or "sms enviado")
         except Exception as e: return False, f"sms err: {e}"
     if canal == "wa":
@@ -1102,7 +1102,7 @@ def handle(chat, uid, text):
     elif cmd == "linterna": sh(f"termux-torch {'on' if arg=='on' else 'off'}"); send(chat, f"🔦 {arg or 'off'}")
     elif cmd == "diga":
         if not arg: send(chat, "uso: /diga <texto>"); return
-        sh("termux-tts-speak %s" % json.dumps(clean_for_tts(arg)), timeout=40); send(chat, "🔊 dicho")
+        sh("termux-tts-speak %s" % json.dumps(clean_for_tts(arg), ensure_ascii=False), timeout=40); send(chat, "🔊 dicho")
     elif cmd == "escucha":
         secs = arg if arg.isdigit() else "10"; f = os.path.join(HERE, "rec.m4a")
         try: os.remove(f)
@@ -1111,7 +1111,7 @@ def handle(chat, uid, text):
         sh(f"termux-microphone-record -l {secs} -f {f}", timeout=20); time.sleep(int(secs) + 2); sh("termux-microphone-record -q", timeout=10)
         if os.path.isfile(f): tg_file("sendAudio", {"chat_id": str(chat), "caption": "🎙️"}, [("audio", "rec.m4a", open(f, "rb").read(), "audio/mp4")])
         else: send(chat, "no se grabo")
-    elif cmd == "copia": sh("termux-clipboard-set %s" % json.dumps(arg)); send(chat, "📋 copiado")
+    elif cmd == "copia": sh("termux-clipboard-set %s" % json.dumps(arg, ensure_ascii=False)); send(chat, "📋 copiado")
     elif cmd == "pega": send(chat, sh("termux-clipboard-get") or "(vacio)")
     elif cmd == "vigilancia":
         if arg == "stop" or VIG["on"]: VIG["on"] = False; send(chat, "📸 vigilancia detenida"); return
@@ -1217,7 +1217,7 @@ def handle(chat, uid, text):
         parts = arg.split(None, 1)
         if len(parts) < 2: send(chat, "uso: /enviarsms <numero> <mensaje>"); return
         num, msg = parts
-        r = sh(f'termux-sms-send -n "{num}" {json.dumps(msg)}', timeout=20)
+        r = sh(f'termux-sms-send -n "{num}" {json.dumps(msg, ensure_ascii=False)}', timeout=20)
         send(chat, "✅ SMS enviado a " + num if not r else f"resp: {r}")
     # ---------- [3] mensajes programados ----------
     elif cmd == "programa":
