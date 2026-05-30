@@ -393,6 +393,20 @@ def do_briefing(chat):
     msg = f"☀️ <b>BUENOS DÍAS</b> — {datetime.datetime.now().strftime('%A %d/%m')}\n\n🌤️ <b>Clima ({esc(CITY)})</b>\n{esc(w)}\n\n📰 <b>Top 3 noticias locales</b>\n{esc(news)}"
     sendf(chat, msg)
 
+def welcome_voice():
+    """Saludo hablado por el ALTAVOZ al arrancar el agente (vía bridge /tts, offline).
+    Configurable: WELCOME_VOICE=off lo apaga · WELCOME_PHRASE cambia la frase."""
+    if ENV.get("WELCOME_VOICE", "on").strip().lower() == "off":
+        return
+    phrase = ENV.get("WELCOME_PHRASE", "Bienvenido señor. Sistemas en línea. Listo para otro día.")
+    def _say():
+        try:
+            time.sleep(2)  # dar tiempo a que el motor TTS del bridge termine de iniciar
+            sh("termux-tts-speak %s" % json.dumps(phrase), timeout=30)
+        except Exception as e:
+            print("welcome_voice:", e)
+    threading.Thread(target=_say, daemon=True).start()
+
 def parse_delay(s):
     s = s.strip().lower()
     m = re.match(r'^(\d+)\s*([smhd])$', s)
@@ -1721,6 +1735,7 @@ def main():
     _uname = tg("getMe").get("result", {}).get("username", "?")
     BOT_USERNAME["v"] = _uname
     print("Bot activo: @" + _uname)
+    welcome_voice()
     setup_bot_commands()
     threading.Thread(target=scheduler, daemon=True).start()
     offset = None
