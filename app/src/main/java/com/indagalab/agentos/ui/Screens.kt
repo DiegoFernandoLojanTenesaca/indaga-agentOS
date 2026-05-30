@@ -88,6 +88,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.chaquo.python.Python
+import com.composables.icons.lucide.ArrowLeft
 import com.composables.icons.lucide.Ban
 import com.composables.icons.lucide.Bell
 import com.composables.icons.lucide.BookOpen
@@ -106,6 +107,7 @@ import com.composables.icons.lucide.House
 import com.composables.icons.lucide.Info
 import com.composables.icons.lucide.KeyRound
 import com.composables.icons.lucide.Layers
+import com.composables.icons.lucide.LayoutGrid
 import com.composables.icons.lucide.List
 import com.composables.icons.lucide.Lock
 import com.composables.icons.lucide.Lucide
@@ -118,7 +120,6 @@ import com.composables.icons.lucide.ScrollText
 import com.composables.icons.lucide.Settings
 import com.composables.icons.lucide.ShieldCheck
 import com.composables.icons.lucide.Smartphone
-import com.composables.icons.lucide.Sparkles
 import com.composables.icons.lucide.Square
 import com.composables.icons.lucide.Trash2
 import com.composables.icons.lucide.Zap
@@ -175,6 +176,7 @@ fun AppScaffold() {
         return
     }
     var tab by remember { mutableStateOf(0) }
+    var prevTab by remember { mutableStateOf(0) }
     var token by remember { mutableStateOf(store.token) }
     var env by remember { mutableStateOf(store.envBlob) }
     var logs by remember { mutableStateOf("—") }
@@ -197,19 +199,20 @@ fun AppScaffold() {
         topBar = {
             CenterAlignedTopAppBar(
                 title = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Image(
-                            painter = painterResource(R.mipmap.ic_launcher),
-                            contentDescription = null,
-                            modifier = Modifier.size(30.dp).clip(RoundedCornerShape(9.dp)),
-                        )
-                        Spacer(Modifier.size(10.dp))
-                        Text("AgentOS", style = MaterialTheme.typography.titleLarge)
+                    Text(if (tab == 5) "Acerca" else "AgentOS", style = MaterialTheme.typography.titleLarge)
+                },
+                navigationIcon = {
+                    if (tab == 5) {
+                        IconButton(onClick = { tab = prevTab }) {
+                            Icon(Lucide.ArrowLeft, contentDescription = "Volver", tint = MaterialTheme.colorScheme.onBackground)
+                        }
                     }
                 },
                 actions = {
-                    IconButton(onClick = { tab = 5 }) {
-                        Icon(Lucide.Info, contentDescription = "Acerca", tint = MaterialTheme.colorScheme.onBackground)
+                    if (tab != 5) {
+                        IconButton(onClick = { prevTab = tab; tab = 5 }) {
+                            Icon(Lucide.Info, contentDescription = "Acerca", tint = MaterialTheme.colorScheme.onBackground)
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
@@ -224,11 +227,11 @@ fun AppScaffold() {
                 containerColor = MaterialTheme.colorScheme.background,
                 tonalElevation = 0.dp,
             ) {
-                NavigationBarItem(tab == 0, { tab = 0 }, { Icon(Lucide.House, null) }, label = { Text("Inicio") })
-                NavigationBarItem(tab == 1, { tab = 1 }, { Icon(Lucide.Sparkles, null) }, label = { Text("Funciones") })
-                NavigationBarItem(tab == 2, { tab = 2 }, { Icon(Lucide.Settings, null) }, label = { Text("Config") })
-                NavigationBarItem(tab == 3, { tab = 3 }, { Icon(Lucide.Smartphone, null) }, label = { Text("Sistema") })
-                NavigationBarItem(tab == 4, { tab = 4 }, { Icon(Lucide.ScrollText, null) }, label = { Text("Logs") })
+                NavigationBarItem(selected = tab == 0, onClick = { tab = 0 }, icon = { Icon(Lucide.House, null) }, label = { Text("Inicio") }, alwaysShowLabel = false)
+                NavigationBarItem(selected = tab == 1, onClick = { tab = 1 }, icon = { Icon(Lucide.LayoutGrid, null) }, label = { Text("Funciones") }, alwaysShowLabel = false)
+                NavigationBarItem(selected = tab == 2, onClick = { tab = 2 }, icon = { Icon(Lucide.Settings, null) }, label = { Text("Config") }, alwaysShowLabel = false)
+                NavigationBarItem(selected = tab == 3, onClick = { tab = 3 }, icon = { Icon(Lucide.Smartphone, null) }, label = { Text("Sistema") }, alwaysShowLabel = false)
+                NavigationBarItem(selected = tab == 4, onClick = { tab = 4 }, icon = { Icon(Lucide.ScrollText, null) }, label = { Text("Logs") }, alwaysShowLabel = false)
             }
         },
     ) { pad ->
@@ -300,7 +303,7 @@ private fun HomeScreen(
                     Modifier.size(46.dp).clip(RoundedCornerShape(13.dp))
                         .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)),
                     contentAlignment = Alignment.Center,
-                ) { Icon(Lucide.Sparkles, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp)) }
+                ) { Icon(Lucide.LayoutGrid, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp)) }
                 Column(Modifier.weight(1f)) {
                     Text("Funciones", style = MaterialTheme.typography.titleMedium)
                     Text(
@@ -353,8 +356,8 @@ private fun AgentHero(running: Boolean, botUser: String?) {
                 Text("Conectado como $botUser", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
             }
             Text(
-                if (running) "Tu asistente está activo y atento, 24/7."
-                else "Tu asistente personal, listo para vivir\nen tu teléfono y ayudarte 24/7.",
+                if (running) "Activo y atento, trabajando para vos las 24 horas."
+                else "Inteligencia artificial real, dentro de tu teléfono.\nSin nube, sin Google.",
                 style = MaterialTheme.typography.bodyLarge,
                 textAlign = TextAlign.Center,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
