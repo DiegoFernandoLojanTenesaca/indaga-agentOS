@@ -9,6 +9,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.keyframes
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -337,11 +338,32 @@ private fun AgentHero(running: Boolean, botUser: String?) {
         animationSpec = infiniteRepeatable(tween(1700), RepeatMode.Reverse),
         label = "glow",
     )
-    val scale by infinite.animateFloat(
+    val ring by infinite.animateFloat(
         initialValue = 1f,
-        targetValue = if (running) 1.10f else 1.03f,
+        targetValue = if (running) 1.12f else 1.04f,
         animationSpec = infiniteRepeatable(tween(1700), RepeatMode.Reverse),
-        label = "scale",
+        label = "ring",
+    )
+    val floatY by infinite.animateFloat(
+        initialValue = -4f,
+        targetValue = 4f,
+        animationSpec = infiniteRepeatable(tween(2300), RepeatMode.Reverse),
+        label = "floatY",
+    )
+    // parpadeo: el robot "cierra los ojos" un instante cada ~3.4s (squash vertical)
+    val blink by infinite.animateFloat(
+        initialValue = 1f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = keyframes {
+                durationMillis = 3400
+                1f at 0
+                1f at 3000
+                0.12f at 3150
+                1f at 3300
+            },
+        ),
+        label = "blink",
     )
     ElevatedCard(Modifier.fillMaxWidth()) {
         Column(
@@ -351,14 +373,20 @@ private fun AgentHero(running: Boolean, botUser: String?) {
         ) {
             Box(contentAlignment = Alignment.Center) {
                 Box(
-                    Modifier.size(116.dp).scale(scale).clip(CircleShape)
+                    Modifier.size(116.dp).scale(ring).clip(CircleShape)
                         .background(MaterialTheme.colorScheme.primary.copy(alpha = glow)),
                 )
                 Box(
-                    Modifier.size(82.dp).clip(CircleShape)
+                    Modifier.size(82.dp).offset(y = floatY.dp).clip(CircleShape)
                         .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)),
                     contentAlignment = Alignment.Center,
-                ) { Icon(Lucide.Bot, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(44.dp)) }
+                ) {
+                    Icon(
+                        Lucide.Bot, null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(44.dp).scale(scaleX = 1f, scaleY = blink),
+                    )
+                }
             }
             StatusPill(running)
             if (running && botUser != null) {
