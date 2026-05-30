@@ -15,6 +15,7 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.offset
@@ -31,6 +32,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -69,9 +71,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -172,6 +178,7 @@ fun AppScaffold() {
     }
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
                 title = {
@@ -186,13 +193,17 @@ fun AppScaffold() {
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    titleContentColor = MaterialTheme.colorScheme.onSurface,
+                    containerColor = MaterialTheme.colorScheme.background,
+                    scrolledContainerColor = MaterialTheme.colorScheme.background,
+                    titleContentColor = MaterialTheme.colorScheme.onBackground,
                 ),
             )
         },
         bottomBar = {
-            NavigationBar {
+            NavigationBar(
+                containerColor = MaterialTheme.colorScheme.background,
+                tonalElevation = 0.dp,
+            ) {
                 NavigationBarItem(tab == 0, { tab = 0 }, { Icon(Lucide.House, null) }, label = { Text("Inicio") })
                 NavigationBarItem(tab == 1, { tab = 1 }, { Icon(Lucide.Settings, null) }, label = { Text("Config") })
                 NavigationBarItem(tab == 2, { tab = 2 }, { Icon(Lucide.Smartphone, null) }, label = { Text("Sistema") })
@@ -226,7 +237,7 @@ private fun HomeScreen(
     onGoConfig: () -> Unit,
 ) {
     Column(
-        Modifier.fillMaxSize().padding(20.dp).verticalScroll(rememberScrollState()),
+        Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 10.dp).verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(18.dp),
     ) {
         ElevatedCard(Modifier.fillMaxWidth()) {
@@ -285,8 +296,10 @@ private fun ConfigScreen(
     onSave: () -> Unit,
 ) {
     var saved by remember { mutableStateOf(false) }
+    var tokenVisible by remember { mutableStateOf(false) }
+    var howOpen by remember { mutableStateOf(false) }
     Column(
-        Modifier.fillMaxSize().padding(20.dp).verticalScroll(rememberScrollState()),
+        Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 10.dp).verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         SectionCard("Bot de Telegram", Lucide.Bot) {
@@ -295,9 +308,38 @@ private fun ConfigScreen(
                 onValueChange = { onTokenChange(it); saved = false },
                 label = { Text("Bot Token") },
                 singleLine = true,
+                visualTransformation = if (tokenVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                trailingIcon = {
+                    TextButton(onClick = { tokenVisible = !tokenVisible }) {
+                        Text(if (tokenVisible) "Ocultar" else "Ver", style = MaterialTheme.typography.labelSmall)
+                    }
+                },
                 modifier = Modifier.fillMaxWidth(),
             )
-            Text("Lo da @BotFather en Telegram.", style = MaterialTheme.typography.bodySmall)
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable { howOpen = !howOpen },
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    "¿Cómo consigo el token?",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(if (howOpen) "▾" else "▸", color = MaterialTheme.colorScheme.primary)
+            }
+            if (howOpen) {
+                Text(
+                    "1) En Telegram abrí @BotFather.\n" +
+                        "2) Enviá /newbot y seguí los pasos (nombre + @usuario del bot).\n" +
+                        "3) Te da un token tipo 123456789:AAE… — pegalo arriba.\n" +
+                        "4) Escribíle a tu bot: el primer chat que escribe queda como dueño.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                Text("Lo da @BotFather en Telegram.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
         SectionCard("Variables y API keys", Lucide.KeyRound) {
             OutlinedTextField(
@@ -331,7 +373,7 @@ private fun SystemScreen(env: String, running: Boolean) {
     LaunchedEffect(Unit) { ignoringBatt = isIgnoringBattery(ctx) }
 
     Column(
-        Modifier.fillMaxSize().padding(20.dp).verticalScroll(rememberScrollState()),
+        Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 10.dp).verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         SectionCard("Dispositivo", Lucide.Smartphone) {
@@ -400,6 +442,7 @@ private fun SystemScreen(env: String, running: Boolean) {
 @Composable
 private fun LogsScreen(logs: String) {
     val scroll = rememberScrollState()
+    val clip = LocalClipboardManager.current
     LaunchedEffect(logs) { scroll.scrollTo(scroll.maxValue) }
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
@@ -407,9 +450,14 @@ private fun LogsScreen(logs: String) {
                 Icon(Lucide.ScrollText, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
                 Text("Actividad", style = MaterialTheme.typography.titleMedium)
             }
-            IconButton(onClick = {
-                try { Python.getInstance().getModule("jarvis").callAttr("clear_logs") } catch (_: Exception) {}
-            }) { Icon(Lucide.Trash2, contentDescription = "Limpiar", tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                TextButton(onClick = { clip.setText(AnnotatedString(logs)) }) {
+                    Text("Copiar", style = MaterialTheme.typography.labelMedium)
+                }
+                IconButton(onClick = {
+                    try { Python.getInstance().getModule("jarvis").callAttr("clear_logs") } catch (_: Exception) {}
+                }) { Icon(Lucide.Trash2, contentDescription = "Limpiar", tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+            }
         }
         Surface(tonalElevation = 2.dp, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxSize()) {
             Text(
@@ -426,7 +474,7 @@ private fun LogsScreen(logs: String) {
 private fun AboutScreen() {
     val ctx = LocalContext.current
     Column(
-        Modifier.fillMaxSize().padding(20.dp).verticalScroll(rememberScrollState()),
+        Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 10.dp).verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -535,7 +583,11 @@ private fun ProviderChip(name: String, on: Boolean) {
 
 @Composable
 private fun SectionCard(title: String, icon: ImageVector, content: @Composable () -> Unit) {
-    Card(Modifier.fillMaxWidth()) {
+    Card(
+        Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+    ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
@@ -581,11 +633,12 @@ private fun WelcomeScreen(onStart: () -> Unit) {
         ),
     ) {
         Column(
-            Modifier.fillMaxSize().navigationBarsPadding().padding(28.dp),
+            Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()
+                .verticalScroll(rememberScrollState()).padding(28.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            Spacer(Modifier.weight(1f))
+            Spacer(Modifier.height(44.dp))
             AnimatedVisibility(show, enter = fadeIn(tween(800)) + scaleIn(initialScale = 0.6f, animationSpec = tween(800))) {
                 Image(
                     painter = painterResource(R.mipmap.ic_launcher),
@@ -610,7 +663,7 @@ private fun WelcomeScreen(onStart: () -> Unit) {
                     WelcomeFeature(icon, t, s)
                 }
             }
-            Spacer(Modifier.weight(1f))
+            Spacer(Modifier.height(44.dp))
             AnimatedVisibility(show, enter = fadeIn(tween(700, 850)) + slideInVertically { it / 2 }) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Button(onClick = onStart, modifier = Modifier.fillMaxWidth().height(56.dp)) {
