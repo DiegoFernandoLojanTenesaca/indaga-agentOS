@@ -20,6 +20,8 @@ private val Stone = Color(0xFF1C1917)
 private val LightColors = lightColorScheme(
     primary = Orange,
     onPrimary = Color.White,
+    primaryContainer = Color(0xFFFFE2C7),
+    onPrimaryContainer = Color(0xFF5A2600),
     secondary = Gold,
     onSecondary = Stone,
     tertiary = OrangeLight,
@@ -27,18 +29,28 @@ private val LightColors = lightColorScheme(
     onBackground = Stone,
     surface = Color.White,
     onSurface = Stone,
+    surfaceVariant = Color(0xFFF1E7DB),
+    onSurfaceVariant = Color(0xFF53493F),
+    outline = Color(0xFF8C8074),
+    outlineVariant = Color(0xFFD8CCBE),
 )
 
 private val DarkColors = darkColorScheme(
     primary = OrangeLight,
-    onPrimary = Stone,
+    onPrimary = Color(0xFF1A0E02),
+    primaryContainer = Color(0xFF7C3D10),
+    onPrimaryContainer = Cream,
     secondary = Gold,
     onSecondary = Stone,
     tertiary = Orange,
     background = Color(0xFF14110F),
     onBackground = Cream,
-    surface = Color(0xFF1C1917),
+    surface = Color(0xFF1F1B18),
     onSurface = Cream,
+    surfaceVariant = Color(0xFF2C2622),
+    onSurfaceVariant = Color(0xFFD9CCBE),
+    outline = Color(0xFF8F8276),
+    outlineVariant = Color(0xFF3A332E),
 )
 
 // Espíritu "Expressive": formas redondeadas pronunciadas (cards, botones, chips).
