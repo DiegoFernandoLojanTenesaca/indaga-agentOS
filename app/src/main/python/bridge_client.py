@@ -2,8 +2,8 @@
 Cliente del AndroidBridge — reemplaza los comandos `termux-*` por llamadas HTTP
 al puente Kotlin en 127.0.0.1:8765 (ver bridge/AndroidBridge.kt).
 
-Fase 1b-1 implementado: battery, torch, vibrate, tts, notify, clipboard.
-Fase 1b-2 (pendiente): camera, location, sms, telephony-call, microphone, sensor, volume.
+Implementado: battery, torch, vibrate, tts, notify, clipboard, camera, location,
+sms (enviar+listar), telephony-call, microphone, sensor (+lista), volume.
 """
 
 import json

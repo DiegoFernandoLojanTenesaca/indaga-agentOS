@@ -21,6 +21,9 @@ class AgentService : Service() {
 
     private var wakeLock: PowerManager.WakeLock? = null
     private var bridge: com.indagalab.agentos.bridge.AndroidBridge? = null
+    private var watchdog: android.os.Handler? = null
+    private var watchdogThread: android.os.HandlerThread? = null
+    private var lastConfigJson: String? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -39,18 +42,21 @@ class AgentService : Service() {
         startBridge()
 
         if (token.isNotBlank()) {
+            val cfg = buildConfigJson(token, envBlob)
+            lastConfigJson = cfg
             try {
-                Python.getInstance().getModule("jarvis")
-                    .callAttr("start", buildConfigJson(token, envBlob))
+                Python.getInstance().getModule("jarvis").callAttr("start", cfg)
                 AgentState.running.value = true
             } catch (e: Exception) {
                 android.util.Log.e(TAG, "Failed to start jarvis: ${e.message}", e)
             }
+            startWatchdog()
         }
         return START_STICKY
     }
 
     override fun onDestroy() {
+        stopWatchdog()
         try {
             Python.getInstance().getModule("jarvis").callAttr("stop")
         } catch (_: Exception) { /* runtime may already be gone */ }
@@ -110,11 +116,59 @@ class AgentService : Service() {
             .build()
     }
 
+    // ---------- Watchdog: revive a Jarvis si el hilo muere o se cuelga ----------
+    private fun startWatchdog() {
+        if (watchdogThread != null) return
+        val t = android.os.HandlerThread("agentos-watchdog").also { it.start() }
+        watchdogThread = t
+        val h = android.os.Handler(t.looper)
+        watchdog = h
+        val tick = object : Runnable {
+            override fun run() {
+                try {
+                    checkAgentHealth()
+                } catch (e: Exception) {
+                    android.util.Log.e(TAG, "watchdog: ${e.message}", e)
+                }
+                h.postDelayed(this, WATCHDOG_INTERVAL_MS)
+            }
+        }
+        h.postDelayed(tick, WATCHDOG_INTERVAL_MS)
+    }
+
+    private fun stopWatchdog() {
+        watchdog?.removeCallbacksAndMessages(null)
+        watchdogThread?.quitSafely()
+        watchdog = null
+        watchdogThread = null
+    }
+
+    private fun checkAgentHealth() {
+        if (!AgentState.running.value) return
+        val py = Python.getInstance().getModule("jarvis")
+        if (!py.callAttr("is_alive").toBoolean()) {
+            android.util.Log.w(TAG, "watchdog: hilo Jarvis caído → restart suave")
+            lastConfigJson?.let { py.callAttr("start", it) }
+            return
+        }
+        val beat = py.callAttr("last_beat").toDouble()
+        val idle = System.currentTimeMillis() / 1000.0 - beat
+        if (beat > 0 && idle > WATCHDOG_STALE_SEC) {
+            android.util.Log.w(TAG, "watchdog: Jarvis colgado (${idle.toInt()}s sin latido) → reinicio de proceso")
+            // El hilo Python está vivo pero atascado; CPython no permite matarlo
+            // limpio. Matamos el proceso: START_STICKY revive el servicio con un
+            // runtime Python fresco (onStartCommand relee el token del ConfigStore).
+            android.os.Process.killProcess(android.os.Process.myPid())
+        }
+    }
+
     companion object {
         const val EXTRA_TOKEN = "token"
         const val EXTRA_ENV = "env"
         private const val TAG = "AgentService"
         private const val CHANNEL_ID = "agentos_service"
         private const val NOTIF_ID = 1
+        private const val WATCHDOG_INTERVAL_MS = 30_000L
+        private const val WATCHDOG_STALE_SEC = 120.0
     }
 }

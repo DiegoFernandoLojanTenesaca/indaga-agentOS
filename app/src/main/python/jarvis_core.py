@@ -74,6 +74,7 @@ HIST, USAGE, DOCS, START = {}, {}, {}, time.time()
 VIG = {"on": False}; ANTIROBO = {"on": False}; MON = {"batt": 0, "temp": 0, "ram": 0}
 SMS_LAST_ID = {"v": 0}  # tracking del último SMS forwardeado
 SILENCIO_QUEUE = []  # mensajes acumulados durante modo silencioso
+LAST_BEAT = {"t": START}  # heartbeat para el watchdog (lo refrescan scheduler() y main())
 
 def db():
     c = sqlite3.connect(DB, timeout=10)
@@ -243,8 +244,13 @@ def shrink(path, maxpx=1024, q=72):
         return path
 
 def speak(chat, text):
-    # La voz (edge-tts) se hará vía AndroidBridge /tts (Fase 1b). Por ahora
-    # devolvemos False para que reply() responda en texto.
+    """Modo /voz: además del texto, lo dice por el ALTAVOZ del teléfono vía el
+    bridge /tts (TTS nativo offline, sin Google). Devuelve False para que reply()
+    igual envíe el texto a Telegram (el usuario remoto necesita leerlo)."""
+    try:
+        sh("termux-tts-speak %s" % json.dumps(str(text)[:1500]), timeout=40)
+    except Exception as e:
+        print("speak:", e)
     return False
 
 def reply(chat, text):
@@ -876,6 +882,7 @@ def scheduler():
     while True:
         try:
             now = time.time()
+            LAST_BEAT["t"] = now  # latido del scheduler (cada ~20s)
             d = datetime.datetime.now()
             c = db()
             for rid, chat, texto in c.execute("SELECT id,chat,texto FROM recordatorios WHERE hecho=0 AND due<=?", (now,)).fetchall():
@@ -971,7 +978,7 @@ def handle(chat, uid, text):
     elif cmd == "modo":
         if arg in MODES: STATE["mode"] = arg; HIST.pop(chat, None); send(chat, f"OK modo: {arg}")
         else: send(chat, "modos: " + ", ".join(MODES))
-    elif cmd == "voz": STATE["voz"] = (arg == "on"); send(chat, f"🔊 voz: {'ON (solo audio)' if STATE['voz'] else 'off'}")
+    elif cmd == "voz": STATE["voz"] = (arg == "on"); send(chat, f"🔊 voz: {'ON (lo digo por el altavoz del teléfono)' if STATE['voz'] else 'off'}")
     elif cmd == "agente": STATE["agente"] = (arg == "on"); send(chat, f"🕵️ agente: {'ON' if STATE['agente'] else 'off'}")
     elif cmd == "traduce": STATE["traduce"] = (arg or "off"); send(chat, f"🌎 traductor: {STATE['traduce']}")
     elif cmd == "web":
@@ -1041,14 +1048,24 @@ def handle(chat, uid, text):
     elif cmd == "alarma": alarma(chat)
     elif cmd == "baja":
         if not arg: send(chat, "uso: /baja <url>"); return
+        try:
+            import yt_dlp  # puro-Python; se empaqueta vía el bloque pip de Chaquopy
+        except Exception:
+            send(chat, "⚠️ /baja no está disponible en esta build (falta yt-dlp). "
+                       "Se habilita agregando 'yt-dlp' al bloque pip de Chaquopy."); return
         send(chat, "bajando…")
         for f in glob.glob(os.path.join(HERE, "dl.*")):
             try: os.remove(f)
             except Exception: pass
-        r = sh(f'yt-dlp -f bestaudio --no-playlist -o "{HERE}/dl.%(ext)s" "{arg}"', timeout=300)
+        try:
+            opts = {"format": "bestaudio", "noplaylist": True,
+                    "outtmpl": os.path.join(HERE, "dl.%(ext)s"), "quiet": True, "no_warnings": True}
+            with yt_dlp.YoutubeDL(opts) as ydl: ydl.download([arg])
+        except Exception as e:
+            send(chat, f"fallo: {e}"); return
         fs = glob.glob(os.path.join(HERE, "dl.*"))
         if fs: tg_file("sendAudio", {"chat_id": str(chat), "caption": "🎵"}, [("audio", os.path.basename(fs[0]), open(fs[0], "rb").read(), "audio/mpeg")])
-        else: send(chat, f"fallo: {r[-400:]}")
+        else: send(chat, "no se pudo bajar el audio")
     elif cmd == "nota":
         if not arg: send(chat, "uso: /nota <texto>"); return
         c = db(); c.execute("INSERT INTO notas(chat,t,ts) VALUES(?,?,?)", (str(chat), arg, time.strftime("%d/%m %H:%M"))); c.commit(); c.close(); send(chat, "📝 anotado")
@@ -1699,6 +1716,7 @@ def main():
     offset = None
     while not _STOP.is_set():
         try:
+            LAST_BEAT["t"] = time.time()  # latido del long-poll (cada vuelta)
             params = {"timeout": 30, "allowed_updates": ["message", "edited_message", "callback_query"]}
             if offset: params["offset"] = offset
             for u in tg("getUpdates", **params).get("result", []):
