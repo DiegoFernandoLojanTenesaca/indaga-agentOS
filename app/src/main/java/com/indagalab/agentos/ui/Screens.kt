@@ -227,11 +227,11 @@ fun AppScaffold() {
                 containerColor = MaterialTheme.colorScheme.background,
                 tonalElevation = 0.dp,
             ) {
-                NavigationBarItem(selected = tab == 0, onClick = { tab = 0 }, icon = { Icon(Lucide.House, null) }, label = { Text("Inicio") }, alwaysShowLabel = false)
-                NavigationBarItem(selected = tab == 1, onClick = { tab = 1 }, icon = { Icon(Lucide.LayoutGrid, null) }, label = { Text("Funciones") }, alwaysShowLabel = false)
-                NavigationBarItem(selected = tab == 2, onClick = { tab = 2 }, icon = { Icon(Lucide.Settings, null) }, label = { Text("Config") }, alwaysShowLabel = false)
-                NavigationBarItem(selected = tab == 3, onClick = { tab = 3 }, icon = { Icon(Lucide.Smartphone, null) }, label = { Text("Sistema") }, alwaysShowLabel = false)
-                NavigationBarItem(selected = tab == 4, onClick = { tab = 4 }, icon = { Icon(Lucide.ScrollText, null) }, label = { Text("Logs") }, alwaysShowLabel = false)
+                NavigationBarItem(selected = tab == 0, onClick = { tab = 0 }, icon = { Icon(Lucide.House, null) }, label = { Text("Inicio", maxLines = 1, softWrap = false, style = MaterialTheme.typography.labelSmall) }, alwaysShowLabel = false)
+                NavigationBarItem(selected = tab == 1, onClick = { tab = 1 }, icon = { Icon(Lucide.LayoutGrid, null) }, label = { Text("Funciones", maxLines = 1, softWrap = false, style = MaterialTheme.typography.labelSmall) }, alwaysShowLabel = false)
+                NavigationBarItem(selected = tab == 2, onClick = { tab = 2 }, icon = { Icon(Lucide.Settings, null) }, label = { Text("Config", maxLines = 1, softWrap = false, style = MaterialTheme.typography.labelSmall) }, alwaysShowLabel = false)
+                NavigationBarItem(selected = tab == 3, onClick = { tab = 3 }, icon = { Icon(Lucide.Smartphone, null) }, label = { Text("Sistema", maxLines = 1, softWrap = false, style = MaterialTheme.typography.labelSmall) }, alwaysShowLabel = false)
+                NavigationBarItem(selected = tab == 4, onClick = { tab = 4 }, icon = { Icon(Lucide.ScrollText, null) }, label = { Text("Logs", maxLines = 1, softWrap = false, style = MaterialTheme.typography.labelSmall) }, alwaysShowLabel = false)
             }
         },
     ) { pad ->
@@ -366,10 +366,8 @@ private fun AgentHero(running: Boolean, botUser: String?) {
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun FuncionesScreen() {
-    var selectedCap by remember { mutableStateOf<Capability?>(null) }
     Column(
         Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 10.dp).verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -377,24 +375,38 @@ private fun FuncionesScreen() {
         Spacer(Modifier.height(4.dp))
         Text("Lo que puede hacer", style = MaterialTheme.typography.titleLarge)
         Text(
-            "Todo se controla por Telegram. Tocá una función para ver el detalle.",
+            "Tu agente con superpoderes. Todo se controla por Telegram.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        Spacer(Modifier.height(4.dp))
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            CAPABILITIES.forEach { c -> CapabilityChip(c) { selectedCap = c } }
-        }
+        Spacer(Modifier.height(2.dp))
+        CAPABILITIES.forEach { cap -> FeatureCard(cap) }
         Spacer(Modifier.height(8.dp))
     }
-    selectedCap?.let { cap ->
-        AlertDialog(
-            onDismissRequest = { selectedCap = null },
-            confirmButton = { TextButton(onClick = { selectedCap = null }) { Text("Entendido") } },
-            icon = { Icon(cap.icon, null, tint = MaterialTheme.colorScheme.primary) },
-            title = { Text(cap.label) },
-            text = { Text(cap.desc, style = MaterialTheme.typography.bodyMedium) },
-        )
+}
+
+@Composable
+private fun FeatureCard(cap: Capability) {
+    Card(
+        Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+    ) {
+        Row(
+            Modifier.padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Box(
+                Modifier.size(46.dp).clip(RoundedCornerShape(13.dp))
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)),
+                contentAlignment = Alignment.Center,
+            ) { Icon(cap.icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp)) }
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(cap.label, style = MaterialTheme.typography.titleSmall)
+                Text(cap.desc, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
     }
 }
 
