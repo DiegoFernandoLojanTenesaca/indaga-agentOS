@@ -57,8 +57,15 @@ PROVIDERS = {
     "sambanova": {"url": "https://api.sambanova.ai/v1",         "key": "SAMBANOVA_API_KEY", "model": "Meta-Llama-3.3-70B-Instruct"},
     "gemini":    {"url": "https://generativelanguage.googleapis.com/v1beta/openai", "key": "GOOGLE_API_KEY", "model": "gemini-2.0-flash"},
     "openrouter":{"url": "https://openrouter.ai/api/v1",        "key": "OPENROUTER_API_KEY","model": "meta-llama/llama-3.3-70b-instruct:free"},
+    # --- OpenAI-compatibles agregados 2026-05-30 ---
+    # cohere y ai21 verificados free; chutes y zai necesitan SALDO en la cuenta
+    # (devuelven 402/429 sin crédito) — quedan listos para keys con saldo.
+    "cohere":    {"url": "https://api.cohere.ai/compatibility/v1","key": "COHERE_API_KEY",  "model": "command-a-03-2025"},
+    "ai21":      {"url": "https://api.ai21.com/studio/v1",       "key": "AI21_API_KEY",     "model": "jamba-mini"},
+    "chutes":    {"url": "https://llm.chutes.ai/v1",             "key": "CHUTES_API_KEY",   "model": "deepseek-ai/DeepSeek-V3.2-TEE"},
+    "zai":       {"url": "https://api.z.ai/api/paas/v4",         "key": "ZAI_API_KEY",      "model": "glm-4.6"},
 }
-FALLBACK = ["groq", "cerebras", "mistral", "nvidia", "sambanova"]
+FALLBACK = ["groq", "cerebras", "mistral", "nvidia", "sambanova", "cohere", "ai21"]
 VISION = {"provider": "groq", "model": "meta-llama/llama-4-scout-17b-16e-instruct"}
 MODES = {
     "normal": "Eres Jarvis, asistente personal conciso, directo y util. Espanol salvo que pidan otro idioma.",

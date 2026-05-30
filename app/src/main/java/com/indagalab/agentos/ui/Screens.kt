@@ -132,6 +132,10 @@ private val PROVIDERS = listOf(
     Provider("SambaNova", "SAMBANOVA_API_KEY"),
     Provider("Gemini", "GOOGLE_API_KEY"),
     Provider("OpenRouter", "OPENROUTER_API_KEY"),
+    Provider("Cohere", "COHERE_API_KEY"),
+    Provider("AI21", "AI21_API_KEY"),
+    Provider("Chutes", "CHUTES_API_KEY"),
+    Provider("Z.ai", "ZAI_API_KEY"),
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
