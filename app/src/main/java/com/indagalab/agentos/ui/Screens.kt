@@ -604,11 +604,15 @@ private fun SystemScreen(env: String, running: Boolean, info: String) {
 
         SectionCard("Modelos de IA", Lucide.Zap) {
             val active = remember(info) { runCatching { JSONObject(info).optString("provider") }.getOrNull().orEmpty() }
-            Text("Verde = key configurada. El activo se resalta cuando el agente corre.", style = MaterialTheme.typography.bodySmall)
+            if (running && active.isNotBlank()) {
+                Text("Proveedor activo: $active", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+            }
+            Text("Verde = key configurada. El activo se resalta cuando el agente está corriendo.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 PROVIDERS.forEach { p ->
                     val on = env.lineSequence().any {
-                        val l = it.trim(); l.startsWith("${p.envKey}=") && l.substringAfter("=").isNotBlank()
+                        val parts = it.split("=", limit = 2)
+                        parts.size == 2 && parts[0].trim() == p.envKey && parts[1].trim().isNotBlank()
                     }
                     val isActive = running && active.isNotBlank() &&
                         p.name.lowercase().replace(".", "").replace(" ", "") == active

@@ -496,11 +496,28 @@ def run_tool(chat, name, args):
         return f"error en {name}: {e}"
     return "tool desconocida"
 
+# Proveedores con buen soporte de tool-calling (en orden de preferencia).
+AGENT_PROVIDERS = ["groq", "mistral", "cerebras"]
+
+def _agent_call(msgs):
+    """call_raw con tools probando varios proveedores: si uno falla o satura, pasa al siguiente."""
+    provs = [p for p in AGENT_PROVIDERS if ENV.get(PROVIDERS[p]["key"])] or ["groq"]
+    err = None
+    for prov in provs:
+        try:
+            return call_raw(prov, msgs, tools=TOOLS)
+        except Exception as e:
+            err = "%s: %s" % (prov, e); print("agente proveedor falló:", err)
+    raise RuntimeError(err or "sin proveedor disponible")
+
 def agent_run(chat, text):
     msgs = [{"role": "system", "content": "Eres Jarvis, asistente con acceso REAL a este telefono. PUEDES y DEBES usar tus herramientas: tomar fotos (y las analizas), ver GPS/ubicacion, bateria, buscar en internet, generar imagenes y crear recordatorios. NUNCA digas que no puedes hacer algo si tienes una herramienta para ello: usala. Responde en espanol."},
             {"role": "user", "content": text}]
     for _ in range(5):
-        d = call_raw("groq", msgs, tools=TOOLS)
+        try:
+            d = _agent_call(msgs)
+        except Exception as e:
+            return "No pude usar el agente ahora (%s). Reintenta o cambia de proveedor." % e
         m = d["choices"][0]["message"]
         msgs.append(m)
         tcs = m.get("tool_calls")
