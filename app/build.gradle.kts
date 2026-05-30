@@ -33,6 +33,10 @@ android {
         }
         release {
             isMinifyEnabled = false
+            // Beta: firmamos el release con la clave debug para que sea instalable
+            // por sideload (descarga desde GitHub). Para Play Store/AppGallery habría
+            // que generar y usar una clave de firma propia.
+            signingConfig = signingConfigs.getByName("debug")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
