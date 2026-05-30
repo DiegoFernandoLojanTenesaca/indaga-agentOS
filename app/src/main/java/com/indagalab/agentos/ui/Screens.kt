@@ -144,17 +144,17 @@ private val CONNECTED = Regex("Conectado como (@\\S+)")
 private data class Capability(val icon: ImageVector, val label: String, val ready: Boolean, val desc: String)
 
 private val CAPABILITIES = listOf(
-    Capability(Lucide.Bot, "Chat con IA", true, "Conversá con la IA por Telegram: preguntas, redacción, traducción y código. Vos elegís el proveedor (Groq, Gemini, Cohere…) y el modo (normal, profe, coder)."),
-    Capability(Lucide.Bell, "Recordatorios", true, "Pedile «recuérdame en 30m sacar la ropa» y te avisa a tiempo. Soporta minutos, horas o una hora puntual."),
+    Capability(Lucide.Bot, "Chat con IA", true, "Conversa con la IA por Telegram: preguntas, redacción, traducción y código. Tú eliges el proveedor (Groq, Gemini, Cohere…) y el modo (normal, profesor, coder)."),
+    Capability(Lucide.Bell, "Recordatorios", true, "Pídele «recuérdame en 30 min sacar la ropa» y te avisa a tiempo. Soporta minutos, horas o una hora puntual."),
     Capability(Lucide.List, "Listas", true, "Listas con casillas marcables (compras, tareas, lo que sea), editables desde el chat con botones."),
-    Capability(Lucide.BookOpen, "Diario", true, "A las 22h te pregunta cómo fue tu día y lo guarda. Pedí resúmenes por semana o mes cuando quieras."),
-    Capability(Lucide.Cloud, "Clima", true, "Clima actual de tu ciudad y un briefing matutino con clima + las 3 noticias locales del día."),
-    Capability(Lucide.Globe, "Búsqueda web", true, "Busca en internet y te resume citando fuentes. También resume cualquier URL o video que le pases."),
-    Capability(Lucide.FileText, "Leer PDFs", true, "Mandale un PDF por Telegram y lo lee para responder preguntas sobre su contenido."),
+    Capability(Lucide.BookOpen, "Diario", true, "A las 22 h te pregunta cómo fue tu día y lo guarda. Pide resúmenes por semana o mes cuando quieras."),
+    Capability(Lucide.Cloud, "Clima", true, "Clima actual de tu ciudad y un resumen matutino con clima y las 3 noticias locales del día."),
+    Capability(Lucide.Globe, "Búsqueda web", true, "Busca en internet y te resume citando fuentes. También resume cualquier URL o video que le envíes."),
+    Capability(Lucide.FileText, "Leer PDFs", true, "Envíale un PDF por Telegram y lo lee para responder preguntas sobre su contenido."),
     Capability(Lucide.Camera, "Cámara", true, "Toma fotos o selfies con la cámara del teléfono y la IA describe lo que ve. Incluye vigilancia y antirrobo con reconocimiento."),
-    Capability(Lucide.MapPin, "Ubicación", true, "Te da la ubicación GPS del teléfono con link a mapas — clave si lo perdés o te lo roban."),
+    Capability(Lucide.MapPin, "Ubicación", true, "Te da la ubicación GPS del teléfono con enlace a mapas — clave si lo pierdes o te lo roban."),
     Capability(Lucide.MessageSquare, "SMS", true, "Lee y envía SMS desde el chat, y te reenvía automáticamente los códigos OTP que llegan a tu SIM."),
-    Capability(Lucide.Mic, "Voz", true, "Mandale notas de voz (las transcribe con IA) y puede responderte hablando por el altavoz del teléfono."),
+    Capability(Lucide.Mic, "Voz", true, "Envíale notas de voz (las transcribe con IA) y puede responderte hablando por el altavoz del teléfono."),
 )
 
 private data class Provider(val name: String, val envKey: String)
@@ -301,7 +301,7 @@ private fun HomeScreen(
             }
         } else {
             FilledTonalButton(onClick = onGoConfig, modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp)) {
-                Icon(Lucide.Settings, null, Modifier.size(18.dp)); Spacer(Modifier.size(8.dp)); Text("Configurá tu bot primero")
+                Icon(Lucide.Settings, null, Modifier.size(18.dp)); Spacer(Modifier.size(8.dp)); Text("Configura tu bot primero")
             }
         }
 
@@ -323,7 +323,7 @@ private fun HomeScreen(
                 Column(Modifier.weight(1f)) {
                     Text("Funciones", style = MaterialTheme.typography.titleMedium)
                     Text(
-                        "Chat, fotos, GPS, SMS, recordatorios y más — tocá para verlas.",
+                        "Chat, fotos, GPS, SMS, recordatorios y más — toca para verlas.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -399,7 +399,7 @@ private fun AgentHero(running: Boolean, botUser: String?) {
                 Text("Conectado como $botUser", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
             }
             Text(
-                if (running) "Activo y atento, trabajando para vos las 24 horas."
+                if (running) "Activo y atento, trabajando para ti las 24 horas."
                 else "Inteligencia artificial real, dentro de tu teléfono.\nSin nube, sin Google.",
                 style = MaterialTheme.typography.bodyLarge,
                 textAlign = TextAlign.Center,
@@ -500,10 +500,10 @@ private fun ConfigScreen(
             }
             if (howOpen) {
                 Text(
-                    "1) En Telegram abrí @BotFather.\n" +
-                        "2) Enviá /newbot y seguí los pasos (nombre + @usuario del bot).\n" +
-                        "3) Te da un token tipo 123456789:AAE… — pegalo arriba.\n" +
-                        "4) Escribíle a tu bot: el primer chat que escribe queda como dueño.",
+                    "1) En Telegram abre @BotFather.\n" +
+                        "2) Envía /newbot y sigue los pasos (nombre + @usuario del bot).\n" +
+                        "3) Te da un token tipo 123456789:AAE… — pégalo arriba.\n" +
+                        "4) Escríbele a tu bot: el primer chat que escribe queda como dueño.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -711,10 +711,10 @@ private fun AboutScreen() {
         }
         SectionCard("Qué es", Lucide.Bot) {
             Text(
-                "AgentOS es tu asistente de IA personal viviendo DENTRO del teléfono. Lo controlás " +
+                "AgentOS es tu asistente de IA personal viviendo DENTRO del teléfono. Lo controlas " +
                     "100% por Telegram: te responde, recuerda, organiza, lee PDFs, toma fotos, ve tu " +
                     "ubicación, lee y envía SMS, y automatiza tu día — 24/7, sin depender de la nube " +
-                    "de nadie más que el modelo de IA que vos elijas.",
+                    "de nadie más que el modelo de IA que tú elijas.",
                 style = MaterialTheme.typography.bodyMedium,
             )
         }
@@ -722,7 +722,7 @@ private fun AboutScreen() {
             FeatureLine(Lucide.Ban, "Cero Google", "Corre en Huawei, ROMs de-Googled y cualquier Android 8+, sin Play Services ni Firebase.")
             FeatureLine(Lucide.Lock, "Privado", "Tus claves y datos viven cifrados en el teléfono (Android Keystore). Nada obligatorio en la nube.")
             FeatureLine(Lucide.Zap, "24/7 de verdad", "Servicio en segundo plano con auto-arranque al encender y watchdog que lo revive si se cae.")
-            FeatureLine(Lucide.Layers, "Multi-IA gratis", "Elegís entre Groq, Gemini, Cohere, Mistral y más — con failover automático entre ellos.")
+            FeatureLine(Lucide.Layers, "Multi-IA gratis", "Eliges entre Groq, Gemini, Cohere, Mistral y más — con failover automático entre ellos.")
         }
         SectionCard("Tecnología", Lucide.Cpu) {
             DetailRow("Motor", "Python 3.13 (Chaquopy)")
@@ -948,7 +948,7 @@ private fun WelcomeScreen(onStart: () -> Unit) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
                         "Al comenzar, la app pedirá permisos (cámara, ubicación, SMS, micrófono) " +
-                            "para darle superpoderes al agente. Vos decidís cuáles conceder.",
+                            "para darle superpoderes al agente. Tú decides cuáles conceder.",
                         style = MaterialTheme.typography.bodySmall,
                         textAlign = TextAlign.Center,
                         color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
@@ -1119,8 +1119,8 @@ private fun KeysGuideCard(env: String, onEnvChange: (String) -> Unit) {
             }
             if (open) {
                 Text(
-                    "Tocá un proveedor para abrir su web y crear la key gratis. \"Usar\" agrega la línea " +
-                        "al recuadro de arriba para que pegues tu key. El agente alterna entre los free solo.",
+                    "Toca un proveedor para abrir su web y crear la key gratis. \"Usar\" agrega la línea " +
+                        "al recuadro de arriba para que pegues tu key. El agente alterna solo entre los gratuitos.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

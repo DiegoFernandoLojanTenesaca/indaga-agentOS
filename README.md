@@ -35,8 +35,8 @@ AgentOS mete un agente de IA en **Python embebido (Chaquopy / CPython 3.13)** de
 | ⏰ | **Agenda** | Recordatorios en lenguaje natural ("recuérdame en 30 min"), mensajes programados (Telegram / SMS / WhatsApp-link), briefing matutino. |
 | 🌐 | **Web** | Búsqueda en internet con fuentes, resumen de URLs, generación de imágenes, vigías de páginas. |
 | 🎙️ | **Voz** | Transcribe notas de voz (Whisper) y puede responder hablando por el altavoz del teléfono. |
-| ⚙️ | **Ajustes en vivo** | Cambiá modelo o proveedor desde Telegram con `/model` y `/provider`, sin reabrir la app. |
-| 🔑 | **Env Vars** | Pegás tus API keys desde la pantalla **Config** (una a una o bulk estilo `.env`). Se guardan **cifradas** en el Android Keystore. |
+| ⚙️ | **Ajustes en vivo** | Cambia modelo o proveedor desde Telegram con `/model` y `/provider`, sin reabrir la app. |
+| 🔑 | **Env Vars** | Pegas tus API keys desde la pantalla **Config** (una a una o en bloque estilo `.env`). Se guardan **cifradas** en el Android Keystore. |
 | 🔋 | **24/7 de verdad** | Foreground service `START_STICKY` + wake lock + **autoarranque en boot** + **watchdog** que revive el agente si se cae. |
 | 👥 | **Multi-usuario** | Whitelist de chats autorizados, roles **dueño** (todos los poderes) vs **invitado** (solo IA). |
 
@@ -82,20 +82,20 @@ echo "sdk.dir=$HOME/android-sdk" > local.properties     # ruta de tu SDK
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Abrí la app → pestaña **Config** → pegá tu **token de Telegram** ([@BotFather](https://t.me/BotFather)) + tus **API keys** (Groq, Gemini, etc. — la app te dice de dónde sacarlas gratis) → **Guardar** → pestaña **Inicio** → **Iniciar agente**. El primer chat que le escriba al bot queda como **dueño** automáticamente.
+Abre la app → pestaña **Config** → pega tu **token de Telegram** ([@BotFather](https://t.me/BotFather)) + tus **API keys** (Groq, Gemini, etc. — la app te indica de dónde obtenerlas gratis) → **Guardar** → pestaña **Inicio** → **Iniciar agente**. El primer chat que le escriba al bot queda como **dueño** automáticamente.
 
 > Guía completa de montaje en otra PC: [`docs/SETUP.md`](docs/SETUP.md) · Diseño y plan por fases: [`ARCHITECTURE.md`](ARCHITECTURE.md)
 
-> **Beta** — en desarrollo activo. Esperá bordes ásperos y cambios.
+> **Beta** — en desarrollo activo. Espera bordes ásperos y cambios.
 
 ## Aviso de seguridad
 
-AgentOS le da a una IA capacidades reales sobre tu teléfono — cámara, SMS, llamadas, ubicación. Tené en cuenta:
+AgentOS le da a una IA capacidades reales sobre tu teléfono — cámara, SMS, llamadas, ubicación. Ten en cuenta:
 
-- **La IA se equivoca.** Los modelos alucinan y a veces hacen cosas no previstas. Verificá antes de confiar en salidas críticas.
+- **La IA se equivoca.** Los modelos alucinan y a veces hacen cosas no previstas. Verifica antes de confiar en salidas críticas.
 - **Prompt injection es un riesgo real.** Contenido malicioso de webs, mensajes o archivos podría manipular al agente. Hay defensas, pero ningún sistema es a prueba de balas.
 - **Tus claves viven en tu teléfono**, cifradas en el Keystore. No se suben a ningún lado salvo al proveedor de IA que elijas.
-- **Vos sos responsable** de lo que hace tu agente. AgentOS es una herramienta, no un consejo.
+- **Eres responsable** de lo que hace tu agente. AgentOS es una herramienta, no un consejo.
 
 ## Créditos
 
