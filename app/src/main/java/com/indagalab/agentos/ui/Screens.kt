@@ -1,9 +1,12 @@
 package com.indagalab.agentos.ui
 
+import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.RepeatMode
@@ -839,6 +842,9 @@ private fun FeatureLine(icon: ImageVector, title: String, body: String) {
 private fun WelcomeScreen(onStart: () -> Unit) {
     var show by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { show = true }
+    val permLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions(),
+    ) { onStart() }
     val infinite = rememberInfiniteTransition(label = "float")
     val floatY by infinite.animateFloat(
         initialValue = 0f, targetValue = -12f,
@@ -894,7 +900,31 @@ private fun WelcomeScreen(onStart: () -> Unit) {
             Spacer(Modifier.height(44.dp))
             AnimatedVisibility(show, enter = fadeIn(tween(700, 850)) + slideInVertically { it / 2 }) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Button(onClick = onStart, modifier = Modifier.fillMaxWidth().height(56.dp)) {
+                    Text(
+                        "Al comenzar, la app pedirá permisos (cámara, ubicación, SMS, micrófono) " +
+                            "para darle superpoderes al agente. Vos decidís cuáles conceder.",
+                        style = MaterialTheme.typography.bodySmall,
+                        textAlign = TextAlign.Center,
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                    )
+                    Button(
+                        onClick = {
+                            val perms = buildList {
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                    add(Manifest.permission.POST_NOTIFICATIONS)
+                                }
+                                add(Manifest.permission.CAMERA)
+                                add(Manifest.permission.ACCESS_FINE_LOCATION)
+                                add(Manifest.permission.SEND_SMS)
+                                add(Manifest.permission.READ_SMS)
+                                add(Manifest.permission.CALL_PHONE)
+                                add(Manifest.permission.RECORD_AUDIO)
+                                add(Manifest.permission.READ_CONTACTS)
+                            }.toTypedArray()
+                            permLauncher.launch(perms)
+                        },
+                        modifier = Modifier.fillMaxWidth().height(56.dp),
+                    ) {
                         Text("Comenzar", style = MaterialTheme.typography.titleMedium)
                     }
                     Text(
