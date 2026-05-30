@@ -24,6 +24,13 @@ android {
     }
 
     buildTypes {
+        debug {
+            // Sufijo para que la build de desarrollo CONVIVA con la de producción
+            // (firmada con otra llave) en el mismo dispositivo, sin desinstalarla.
+            // applicationId final = com.indagalab.agentos.dev
+            applicationIdSuffix = ".dev"
+            versionNameSuffix = "-dev"
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(
