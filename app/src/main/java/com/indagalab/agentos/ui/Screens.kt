@@ -129,6 +129,7 @@ import com.indagalab.agentos.data.ConfigStore
 import com.indagalab.agentos.service.AgentService
 import com.indagalab.agentos.service.AgentState
 import kotlinx.coroutines.delay
+import org.json.JSONObject
 
 private val Green = Color(0xFF16A34A)
 private val CONNECTED = Regex("Conectado como (@\\S+)")
@@ -180,16 +181,19 @@ fun AppScaffold() {
     var token by remember { mutableStateOf(store.token) }
     var env by remember { mutableStateOf(store.envBlob) }
     var logs by remember { mutableStateOf("—") }
+    var info by remember { mutableStateOf("") }
     val running = AgentState.running.value
     val botUser = CONNECTED.find(logs)?.groupValues?.getOrNull(1)
 
     LaunchedEffect(Unit) {
         while (true) {
+            val py = try { Python.getInstance().getModule("jarvis") } catch (e: Exception) { null }
             logs = try {
-                Python.getInstance().getModule("jarvis").callAttr("get_logs").toString()
+                py?.callAttr("get_logs")?.toString() ?: "(agente aún no iniciado)"
             } catch (e: Exception) {
                 "(agente aún no iniciado)"
             }
+            info = try { py?.callAttr("info")?.toString() ?: "" } catch (e: Exception) { "" }
             delay(1000)
         }
     }
@@ -244,12 +248,12 @@ fun AppScaffold() {
                 label = "tab",
             ) { t ->
                 when (t) {
-                    0 -> HomeScreen(running, token.isNotBlank(), botUser, { startAgent(ctx) }, { stopAgent(ctx) }, { tab = 2 }, { tab = 1 })
+                    0 -> HomeScreen(running, token.isNotBlank(), botUser, info, { startAgent(ctx) }, { stopAgent(ctx) }, { tab = 2 }, { tab = 1 })
                     1 -> FuncionesScreen()
                     2 -> ConfigScreen(token, env, { token = it }, { env = it }) {
                         store.token = token.trim(); store.envBlob = env.trim()
                     }
-                    3 -> SystemScreen(env, running)
+                    3 -> SystemScreen(env, running, info)
                     4 -> LogsScreen(logs)
                     else -> AboutScreen()
                 }
@@ -263,6 +267,7 @@ private fun HomeScreen(
     running: Boolean,
     configured: Boolean,
     botUser: String?,
+    info: String,
     onStart: () -> Unit,
     onStop: () -> Unit,
     onGoConfig: () -> Unit,
@@ -274,6 +279,10 @@ private fun HomeScreen(
     ) {
         Spacer(Modifier.height(6.dp))
         AgentHero(running, botUser)
+        val stats = remember(info) { runCatching { JSONObject(info) }.getOrNull() }
+        if (running && stats != null && stats.optBoolean("running", false)) {
+            StatsCard(stats)
+        }
 
         if (running) {
             OutlinedButton(onClick = onStop, modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp)) {
@@ -492,7 +501,7 @@ private fun ConfigScreen(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun SystemScreen(env: String, running: Boolean) {
+private fun SystemScreen(env: String, running: Boolean, info: String) {
     val ctx = LocalContext.current
     val store = remember { ConfigStore(ctx) }
     var ignoringBatt by remember { mutableStateOf(isIgnoringBattery(ctx)) }
@@ -552,13 +561,16 @@ private fun SystemScreen(env: String, running: Boolean) {
         }
 
         SectionCard("Modelos de IA", Lucide.Zap) {
-            Text("Proveedores soportados (verde = key configurada):", style = MaterialTheme.typography.bodySmall)
+            val active = remember(info) { runCatching { JSONObject(info).optString("provider") }.getOrNull().orEmpty() }
+            Text("Verde = key configurada. El activo se resalta cuando el agente corre.", style = MaterialTheme.typography.bodySmall)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 PROVIDERS.forEach { p ->
                     val on = env.lineSequence().any {
                         val l = it.trim(); l.startsWith("${p.envKey}=") && l.substringAfter("=").isNotBlank()
                     }
-                    ProviderChip(p.name, on)
+                    val isActive = running && active.isNotBlank() &&
+                        p.name.lowercase().replace(".", "").replace(" ", "") == active
+                    ProviderChip(p.name, on, isActive)
                 }
             }
         }
@@ -702,18 +714,58 @@ private fun CapabilityChip(cap: Capability, onClick: () -> Unit) {
 }
 
 @Composable
-private fun ProviderChip(name: String, on: Boolean) {
+private fun ProviderChip(name: String, on: Boolean, active: Boolean = false) {
     val c = if (on) Green else MaterialTheme.colorScheme.outline
-    Surface(color = c.copy(alpha = 0.14f), shape = RoundedCornerShape(50)) {
+    val accent = MaterialTheme.colorScheme.primary
+    Surface(
+        color = if (active) accent.copy(alpha = 0.20f) else c.copy(alpha = 0.14f),
+        shape = RoundedCornerShape(50),
+        border = if (active) BorderStroke(1.dp, accent) else null,
+    ) {
         Row(
             Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            Box(Modifier.size(7.dp).clip(CircleShape).background(c))
-            Text(name, color = c, style = MaterialTheme.typography.labelLarge)
+            Box(Modifier.size(7.dp).clip(CircleShape).background(if (active) accent else c))
+            Text(name, color = if (active) accent else c, style = MaterialTheme.typography.labelLarge)
+            if (active) Text("· activo", color = accent, style = MaterialTheme.typography.labelSmall)
         }
     }
+}
+
+@Composable
+private fun StatsCard(s: JSONObject) {
+    Card(
+        Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(vertical = 14.dp, horizontal = 8.dp),
+            horizontalArrangement = Arrangement.SpaceAround,
+        ) {
+            StatItem(s.optString("provider", "—").ifBlank { "—" }, "Proveedor")
+            StatItem(fmtUptime(s.optInt("uptime_s", 0)), "Activo")
+            StatItem(s.optInt("tokens", 0).toString(), "Tokens")
+            StatItem(s.optInt("requests", 0).toString(), "Pedidos")
+        }
+    }
+}
+
+@Composable
+private fun StatItem(value: String, label: String) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(value, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary, maxLines = 1)
+        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+private fun fmtUptime(s: Int): String = when {
+    s <= 0 -> "—"
+    s < 60 -> "${s}s"
+    s < 3600 -> "${s / 60}m"
+    else -> "${s / 3600}h ${(s % 3600) / 60}m"
 }
 
 @Composable
