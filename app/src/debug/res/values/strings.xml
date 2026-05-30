@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Override solo para la build debug: distingue "AgentOS dev" de la de producción
+     en el launcher. Android funde este source set sobre app/src/main. -->
+<resources>
+    <string name="app_name">AgentOS dev</string>
+</resources>
