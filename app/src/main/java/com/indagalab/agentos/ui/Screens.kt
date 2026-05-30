@@ -16,6 +16,7 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -27,6 +28,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -50,6 +54,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -181,8 +186,8 @@ fun AppScaffold() {
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimary,
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    titleContentColor = MaterialTheme.colorScheme.onSurface,
                 ),
             )
         },
@@ -198,7 +203,7 @@ fun AppScaffold() {
     ) { pad ->
         Box(Modifier.padding(pad)) {
             when (tab) {
-                0 -> HomeScreen(running, token.isNotBlank(), botUser, { startAgent(ctx) }, { stopAgent(ctx) })
+                0 -> HomeScreen(running, token.isNotBlank(), botUser, { startAgent(ctx) }, { stopAgent(ctx) }, { tab = 1 })
                 1 -> ConfigScreen(token, env, { token = it }, { env = it }) {
                     store.token = token.trim(); store.envBlob = env.trim()
                 }
@@ -218,6 +223,7 @@ private fun HomeScreen(
     botUser: String?,
     onStart: () -> Unit,
     onStop: () -> Unit,
+    onGoConfig: () -> Unit,
 ) {
     Column(
         Modifier.fillMaxSize().padding(20.dp).verticalScroll(rememberScrollState()),
@@ -250,13 +256,16 @@ private fun HomeScreen(
         }
 
         if (running) {
-            OutlinedButton(onClick = onStop, modifier = Modifier.fillMaxWidth().height(54.dp)) {
+            OutlinedButton(onClick = onStop, modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp)) {
                 Icon(Lucide.Square, null, Modifier.size(18.dp)); Spacer(Modifier.size(8.dp)); Text("Detener agente")
             }
+        } else if (configured) {
+            Button(onClick = onStart, modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp)) {
+                Icon(Lucide.Play, null, Modifier.size(18.dp)); Spacer(Modifier.size(8.dp)); Text("Iniciar agente")
+            }
         } else {
-            Button(onClick = onStart, enabled = configured, modifier = Modifier.fillMaxWidth().height(54.dp)) {
-                Icon(Lucide.Play, null, Modifier.size(18.dp)); Spacer(Modifier.size(8.dp))
-                Text(if (configured) "Iniciar agente" else "Configura tu bot primero")
+            FilledTonalButton(onClick = onGoConfig, modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp)) {
+                Icon(Lucide.Settings, null, Modifier.size(18.dp)); Spacer(Modifier.size(8.dp)); Text("Configurá tu bot primero")
             }
         }
 
@@ -307,7 +316,8 @@ private fun ConfigScreen(
         if (saved) {
             Text("Guardado. Detén e inicia el agente para aplicar.", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodyMedium)
         }
-        Text("Las claves se guardan solo en este dispositivo.", style = MaterialTheme.typography.bodySmall)
+        Text("Las claves se guardan solo en este dispositivo (cifradas).", style = MaterialTheme.typography.bodySmall)
+        KeysGuideCard(env, onEnvChange)
     }
 }
 
@@ -347,30 +357,30 @@ private fun SystemScreen(env: String, running: Boolean) {
             }
             if (ignoringBatt) {
                 Text(
-                    "✅ Optimización de batería desactivada para AgentOS",
+                    "✓ Optimización de batería desactivada",
                     color = Green,
                     style = MaterialTheme.typography.bodyMedium,
                 )
             } else {
                 Button(
                     onClick = { requestIgnoreBattery(ctx) },
-                    modifier = Modifier.fillMaxWidth().height(50.dp),
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp),
                 ) {
                     Icon(Lucide.ShieldCheck, null, Modifier.size(18.dp)); Spacer(Modifier.size(8.dp))
-                    Text("Desactivar optimización de batería")
+                    Text("Quitar ahorro de batería")
                 }
             }
             OutlinedButton(
                 onClick = { openAutostartSettings(ctx) },
-                modifier = Modifier.fillMaxWidth().height(50.dp),
+                modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp),
             ) {
                 Icon(Lucide.Settings, null, Modifier.size(18.dp)); Spacer(Modifier.size(8.dp))
-                Text("Abrir ajustes de autoarranque")
+                Text("Ajustes de autoarranque")
             }
             OutlinedButton(
                 onClick = { openUrl(ctx, "https://dontkillmyapp.com/${Build.MANUFACTURER.lowercase()}") },
-                modifier = Modifier.fillMaxWidth().height(50.dp),
-            ) { Text("Guía para mi fabricante (dontkillmyapp.com)") }
+                modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp),
+            ) { Text("Guía anti-cierre (dontkillmyapp)") }
         }
 
         SectionCard("Modelos de IA", Lucide.Zap) {
@@ -571,7 +581,7 @@ private fun WelcomeScreen(onStart: () -> Unit) {
         ),
     ) {
         Column(
-            Modifier.fillMaxSize().padding(28.dp),
+            Modifier.fillMaxSize().navigationBarsPadding().padding(28.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
@@ -705,5 +715,96 @@ private fun openAutostartSettings(ctx: Context) {
 private fun openUrl(ctx: Context, url: String) {
     runCatching {
         ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    }
+}
+
+// ---------- guía: de dónde saco las API keys ----------
+private data class KeyGuide(
+    val provider: String,
+    val envKey: String,
+    val where: String,
+    val limits: String,
+    val free: Boolean,
+)
+
+private val KEY_GUIDES = listOf(
+    KeyGuide("Groq", "GROQ_API_KEY", "console.groq.com/keys", "30 RPM · 14.400 req/día · muy rápido", true),
+    KeyGuide("Cerebras", "CEREBRAS_API_KEY", "cloud.cerebras.ai", "30 RPM · 1.000.000 tokens/día", true),
+    KeyGuide("Mistral", "MISTRAL_API_KEY", "console.mistral.ai", "60 RPM · 1.000M tokens/mes", true),
+    KeyGuide("NVIDIA NIM", "NVIDIA_API_KEY", "build.nvidia.com", "40 RPM", true),
+    KeyGuide("SambaNova", "SAMBANOVA_API_KEY", "cloud.sambanova.ai", "crédito $5 · 3 meses", true),
+    KeyGuide("Google Gemini", "GOOGLE_API_KEY", "aistudio.google.com/apikey", "~10 RPM · ~1.000 req/día", true),
+    KeyGuide("OpenRouter", "OPENROUTER_API_KEY", "openrouter.ai/keys", "20 RPM · 50 req/día (1.000 con $10)", true),
+    KeyGuide("Cohere", "COHERE_API_KEY", "dashboard.cohere.com/api-keys", "20 RPM · 1.000 req/mes", true),
+    KeyGuide("AI21", "AI21_API_KEY", "studio.ai21.com", "crédito $10 · 3 meses", true),
+    KeyGuide("Chutes", "CHUTES_API_KEY", "chutes.ai", "requiere saldo (TAO/fiat)", false),
+    KeyGuide("Z.ai (GLM)", "ZAI_API_KEY", "z.ai", "requiere crédito de la cuenta", false),
+)
+
+@Composable
+private fun KeysGuideCard(env: String, onEnvChange: (String) -> Unit) {
+    val ctx = LocalContext.current
+    var open by remember { mutableStateOf(false) }
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable { open = !open },
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Icon(Lucide.KeyRound, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                Text(
+                    "¿De dónde saco las API keys?",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(if (open) "▾" else "▸", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            if (open) {
+                Text(
+                    "Tocá un proveedor para abrir su web y crear la key gratis. \"Usar\" agrega la línea " +
+                        "al recuadro de arriba para que pegues tu key. El agente alterna entre los free solo.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                KEY_GUIDES.forEach { g ->
+                    KeyGuideRow(g, ctx) { line ->
+                        val base = env.trimEnd()
+                        onEnvChange(if (base.isEmpty()) line else base + "\n" + line)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun KeyGuideRow(g: KeyGuide, ctx: Context, onUse: (String) -> Unit) {
+    Column(
+        Modifier.fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+            .clickable { openUrl(ctx, "https://" + g.where) }
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(3.dp),
+    ) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(g.provider, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+            val tagColor = if (g.free) Green else MaterialTheme.colorScheme.tertiary
+            Surface(color = tagColor.copy(alpha = 0.18f), shape = RoundedCornerShape(50)) {
+                Text(
+                    if (g.free) "FREE" else "saldo",
+                    Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                    color = tagColor,
+                    style = MaterialTheme.typography.labelSmall,
+                )
+            }
+            TextButton(
+                onClick = { onUse(g.envKey + "=") },
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+            ) { Text("Usar") }
+        }
+        Text(g.limits, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(g.where, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
     }
 }
