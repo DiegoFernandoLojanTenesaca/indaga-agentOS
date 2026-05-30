@@ -82,6 +82,7 @@ VIG = {"on": False}; ANTIROBO = {"on": False}; MON = {"batt": 0, "temp": 0, "ram
 SMS_LAST_ID = {"v": 0}  # tracking del último SMS forwardeado
 SILENCIO_QUEUE = []  # mensajes acumulados durante modo silencioso
 LAST_BEAT = {"t": START}  # heartbeat para el watchdog (lo refrescan scheduler() y main())
+BOT_USERNAME = {"v": ""}  # @usuario del bot (lo setea main al arrancar) — para la UI
 
 def db():
     c = sqlite3.connect(DB, timeout=10)
@@ -1717,7 +1718,9 @@ def setup_bot_commands():
 
 def main():
     if not TG_TOKEN: print("FALTA TELEGRAM_TOKEN"); return
-    print("Bot activo: @" + tg("getMe").get("result", {}).get("username", "?"))
+    _uname = tg("getMe").get("result", {}).get("username", "?")
+    BOT_USERNAME["v"] = _uname
+    print("Bot activo: @" + _uname)
     setup_bot_commands()
     threading.Thread(target=scheduler, daemon=True).start()
     offset = None

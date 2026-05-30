@@ -68,6 +68,30 @@ def last_beat():
         return 0.0
 
 
+def info():
+    """Estado breve del agente en JSON para la UI (NO toca la red)."""
+    try:
+        if _core is None:
+            return json.dumps({"running": False})
+        st = _core.STATE
+        usage = _core.USAGE
+        tin = sum(v.get("in", 0) for v in usage.values())
+        tout = sum(v.get("out", 0) for v in usage.values())
+        treq = sum(v.get("req", 0) for v in usage.values())
+        up = int(time.time() - _core.START)
+        return json.dumps({
+            "running": bool(_thread is not None and _thread.is_alive()),
+            "provider": st.get("provider", ""),
+            "model": st.get("model", ""),
+            "uptime_s": up,
+            "tokens": tin + tout,
+            "requests": treq,
+            "bot": _core.BOT_USERNAME["v"],
+        })
+    except Exception as e:
+        return json.dumps({"running": False, "error": str(e)})
+
+
 def _run():
     try:
         _core.main()
