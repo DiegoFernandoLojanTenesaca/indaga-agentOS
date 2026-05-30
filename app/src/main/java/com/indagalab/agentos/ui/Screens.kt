@@ -25,6 +25,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -92,6 +93,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.chaquo.python.Python
+import com.composables.icons.lucide.Activity
 import com.composables.icons.lucide.ArrowLeft
 import com.composables.icons.lucide.Ban
 import com.composables.icons.lucide.Bell
@@ -132,6 +134,7 @@ import com.indagalab.agentos.R
 import com.indagalab.agentos.data.ConfigStore
 import com.indagalab.agentos.service.AgentService
 import com.indagalab.agentos.service.AgentState
+import java.time.LocalDate
 import kotlinx.coroutines.delay
 import org.json.JSONObject
 
@@ -537,7 +540,15 @@ private fun SystemScreen(env: String, running: Boolean, info: String) {
     val store = remember { ConfigStore(ctx) }
     var ignoringBatt by remember { mutableStateOf(isIgnoringBattery(ctx)) }
     var autostart by remember { mutableStateOf(store.autostart) }
-    LaunchedEffect(Unit) { ignoringBatt = isIgnoringBattery(ctx) }
+    var heat by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
+    LaunchedEffect(Unit) {
+        ignoringBatt = isIgnoringBattery(ctx)
+        heat = runCatching {
+            val s = Python.getInstance().getModule("jarvis").callAttr("heatmap").toString()
+            val o = JSONObject(s)
+            o.keys().asSequence().associateWith { o.optInt(it) }
+        }.getOrDefault(emptyMap())
+    }
 
     Column(
         Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 10.dp).verticalScroll(rememberScrollState()),
@@ -602,6 +613,41 @@ private fun SystemScreen(env: String, running: Boolean, info: String) {
                     val isActive = running && active.isNotBlank() &&
                         p.name.lowercase().replace(".", "").replace(" ", "") == active
                     ProviderChip(p.name, on, isActive)
+                }
+            }
+        }
+
+        SectionCard("Actividad", Lucide.Activity) {
+            Text(
+                "Requests del agente por día — últimas 26 semanas. Verde más fuerte = más actividad.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            ActivityHeatmap(heat)
+        }
+    }
+}
+
+@Composable
+private fun ActivityHeatmap(map: Map<String, Int>) {
+    val today = remember { LocalDate.now() }
+    Row(
+        Modifier.horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(3.dp),
+    ) {
+        for (week in 0 until 26) {
+            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                for (day in 0 until 7) {
+                    val i = week * 7 + day
+                    val date = today.minusDays((181 - i).toLong()).toString()
+                    val n = map[date] ?: 0
+                    val color = when {
+                        n <= 0 -> MaterialTheme.colorScheme.surfaceVariant
+                        n < 3 -> MaterialTheme.colorScheme.primary.copy(alpha = 0.30f)
+                        n < 8 -> MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)
+                        n < 20 -> MaterialTheme.colorScheme.primary.copy(alpha = 0.78f)
+                        else -> MaterialTheme.colorScheme.primary
+                    }
+                    Box(Modifier.size(11.dp).clip(RoundedCornerShape(3.dp)).background(color))
                 }
             }
         }
