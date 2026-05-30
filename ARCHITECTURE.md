@@ -1,7 +1,7 @@
 # AgentOS — Arquitectura
 
 > **Repo técnico:** `indaga-agentos` · **Producto comercial:** *AgentOS* (paraguas Indaga Lab / Indaga Chatbots)
-> **Estado:** blueprint (Fase 0 documental — aún sin Gradle) · **Fecha:** 2026-05-29
+> **Estado:** Fase 0-1 implementadas (scaffold Gradle + Jarvis embebido + puente de hardware completo). Fase 2 parcial: UI lista; faltan autostart-en-boot, watchdog, exención de batería, cifrado en Keystore, setup por QR y loader de skills. · **Fecha:** 2026-05-30
 
 ---
 

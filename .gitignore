@@ -65,4 +65,5 @@ venv/
 # ===== Agent tooling =====
 .claude/
 .cursor/
+.codegraph/
 .mcp.json

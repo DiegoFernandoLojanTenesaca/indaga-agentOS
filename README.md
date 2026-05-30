@@ -16,7 +16,7 @@ No es para los que tienen un Solana Seeker. Es para el parque que **nadie atiend
 
 ## Estado
 
-🚧 **Blueprint.** Ver [`ARCHITECTURE.md`](./ARCHITECTURE.md) para el diseño completo, el mapeo de hardware y el plan por fases.
+🚧 **Fase 0-1 funcionando** (scaffold + Jarvis embebido + puente de hardware sin Termux). Fase 2 en curso. Ver [`ARCHITECTURE.md`](./ARCHITECTURE.md) para el diseño completo, el mapeo de hardware y el plan por fases.
 
 ## Créditos
 
