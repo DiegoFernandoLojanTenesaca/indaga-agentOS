@@ -39,9 +39,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
@@ -88,6 +90,8 @@ import com.composables.icons.lucide.Bot
 import com.composables.icons.lucide.Camera
 import com.composables.icons.lucide.Cloud
 import com.composables.icons.lucide.Cpu
+import com.composables.icons.lucide.Eye
+import com.composables.icons.lucide.EyeOff
 import com.composables.icons.lucide.FileText
 import com.composables.icons.lucide.Globe
 import com.composables.icons.lucide.House
@@ -117,20 +121,20 @@ import kotlinx.coroutines.delay
 private val Green = Color(0xFF16A34A)
 private val CONNECTED = Regex("Conectado como (@\\S+)")
 
-private data class Capability(val icon: ImageVector, val label: String, val ready: Boolean)
+private data class Capability(val icon: ImageVector, val label: String, val ready: Boolean, val desc: String)
 
 private val CAPABILITIES = listOf(
-    Capability(Lucide.Bot, "Chat con IA", true),
-    Capability(Lucide.Bell, "Recordatorios", true),
-    Capability(Lucide.List, "Listas", true),
-    Capability(Lucide.BookOpen, "Diario", true),
-    Capability(Lucide.Cloud, "Clima", true),
-    Capability(Lucide.Globe, "Búsqueda web", true),
-    Capability(Lucide.FileText, "Leer PDFs", true),
-    Capability(Lucide.Camera, "Cámara", true),
-    Capability(Lucide.MapPin, "Ubicación", true),
-    Capability(Lucide.MessageSquare, "SMS", true),
-    Capability(Lucide.Mic, "Voz", true),
+    Capability(Lucide.Bot, "Chat con IA", true, "Conversá con la IA por Telegram: preguntas, redacción, traducción y código. Vos elegís el proveedor (Groq, Gemini, Cohere…) y el modo (normal, profe, coder)."),
+    Capability(Lucide.Bell, "Recordatorios", true, "Pedile «recuérdame en 30m sacar la ropa» y te avisa a tiempo. Soporta minutos, horas o una hora puntual."),
+    Capability(Lucide.List, "Listas", true, "Listas con casillas marcables (compras, tareas, lo que sea), editables desde el chat con botones."),
+    Capability(Lucide.BookOpen, "Diario", true, "A las 22h te pregunta cómo fue tu día y lo guarda. Pedí resúmenes por semana o mes cuando quieras."),
+    Capability(Lucide.Cloud, "Clima", true, "Clima actual de tu ciudad y un briefing matutino con clima + las 3 noticias locales del día."),
+    Capability(Lucide.Globe, "Búsqueda web", true, "Busca en internet y te resume citando fuentes. También resume cualquier URL o video que le pases."),
+    Capability(Lucide.FileText, "Leer PDFs", true, "Mandale un PDF por Telegram y lo lee para responder preguntas sobre su contenido."),
+    Capability(Lucide.Camera, "Cámara", true, "Toma fotos o selfies con la cámara del teléfono y la IA describe lo que ve. Incluye vigilancia y antirrobo con reconocimiento."),
+    Capability(Lucide.MapPin, "Ubicación", true, "Te da la ubicación GPS del teléfono con link a mapas — clave si lo perdés o te lo roban."),
+    Capability(Lucide.MessageSquare, "SMS", true, "Lee y envía SMS desde el chat, y te reenvía automáticamente los códigos OTP que llegan a tu SIM."),
+    Capability(Lucide.Mic, "Voz", true, "Mandale notas de voz (las transcribe con IA) y puede responderte hablando por el altavoz del teléfono."),
 )
 
 private data class Provider(val name: String, val envKey: String)
@@ -180,19 +184,19 @@ fun AppScaffold() {
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            TopAppBar(
+            CenterAlignedTopAppBar(
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Image(
                             painter = painterResource(R.mipmap.ic_launcher),
                             contentDescription = null,
-                            modifier = Modifier.size(28.dp).clip(RoundedCornerShape(7.dp)),
+                            modifier = Modifier.size(30.dp).clip(RoundedCornerShape(9.dp)),
                         )
                         Spacer(Modifier.size(10.dp))
-                        Text("AgentOS")
+                        Text("AgentOS", style = MaterialTheme.typography.titleLarge)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                     containerColor = MaterialTheme.colorScheme.background,
                     scrolledContainerColor = MaterialTheme.colorScheme.background,
                     titleContentColor = MaterialTheme.colorScheme.onBackground,
@@ -236,6 +240,7 @@ private fun HomeScreen(
     onStop: () -> Unit,
     onGoConfig: () -> Unit,
 ) {
+    var selectedCap by remember { mutableStateOf<Capability?>(null) }
     Column(
         Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 10.dp).verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(18.dp),
@@ -281,9 +286,20 @@ private fun HomeScreen(
         }
 
         Text("Lo que puede hacer", style = MaterialTheme.typography.titleMedium)
+        Text("Tocá cualquiera para ver qué hace.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            CAPABILITIES.forEach { CapabilityChip(it) }
+            CAPABILITIES.forEach { c -> CapabilityChip(c) { selectedCap = c } }
         }
+        Spacer(Modifier.height(8.dp))
+    }
+    selectedCap?.let { cap ->
+        AlertDialog(
+            onDismissRequest = { selectedCap = null },
+            confirmButton = { TextButton(onClick = { selectedCap = null }) { Text("Entendido") } },
+            icon = { Icon(cap.icon, null, tint = MaterialTheme.colorScheme.primary) },
+            title = { Text(cap.label) },
+            text = { Text(cap.desc, style = MaterialTheme.typography.bodyMedium) },
+        )
     }
 }
 
@@ -310,8 +326,12 @@ private fun ConfigScreen(
                 singleLine = true,
                 visualTransformation = if (tokenVisible) VisualTransformation.None else PasswordVisualTransformation(),
                 trailingIcon = {
-                    TextButton(onClick = { tokenVisible = !tokenVisible }) {
-                        Text(if (tokenVisible) "Ocultar" else "Ver", style = MaterialTheme.typography.labelSmall)
+                    IconButton(onClick = { tokenVisible = !tokenVisible }) {
+                        Icon(
+                            if (tokenVisible) Lucide.EyeOff else Lucide.Eye,
+                            contentDescription = if (tokenVisible) "Ocultar token" else "Ver token",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),
@@ -496,10 +516,18 @@ private fun AboutScreen() {
         }
         SectionCard("Qué es", Lucide.Bot) {
             Text(
-                "Un asistente de IA personal que vive en tu teléfono y te ayuda 24/7 por Telegram: " +
-                    "responde, recuerda, organiza y automatiza tu día.",
+                "AgentOS es tu asistente de IA personal viviendo DENTRO del teléfono. Lo controlás " +
+                    "100% por Telegram: te responde, recuerda, organiza, lee PDFs, toma fotos, ve tu " +
+                    "ubicación, lee y envía SMS, y automatiza tu día — 24/7, sin depender de la nube " +
+                    "de nadie más que el modelo de IA que vos elijas.",
                 style = MaterialTheme.typography.bodyMedium,
             )
+        }
+        SectionCard("Por qué es diferente", Lucide.ShieldCheck) {
+            FeatureLine("🚫", "Cero Google", "Corre en Huawei, ROMs de-Googled y cualquier Android 8+, sin Play Services ni Firebase.")
+            FeatureLine("🔒", "Privado", "Tus claves y datos viven cifrados en el teléfono (Android Keystore). Nada obligatorio en la nube.")
+            FeatureLine("🔋", "24/7 de verdad", "Servicio en segundo plano con auto-arranque al encender y watchdog que lo revive si se cae.")
+            FeatureLine("🧩", "Multi-IA gratis", "Elegís entre Groq, Gemini, Cohere, Mistral y más — con failover automático entre ellos.")
         }
         SectionCard("Tecnología", Lucide.Cpu) {
             DetailRow("Motor", "Python 3.13 (Chaquopy)")
@@ -539,9 +567,10 @@ private fun StatusPill(running: Boolean) {
 }
 
 @Composable
-private fun CapabilityChip(cap: Capability) {
+private fun CapabilityChip(cap: Capability, onClick: () -> Unit) {
     val tint = if (cap.ready) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
     Surface(
+        onClick = onClick,
         shape = RoundedCornerShape(12.dp),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
     ) {
@@ -603,6 +632,17 @@ private fun DetailRow(label: String, value: String) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
         Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(value, style = MaterialTheme.typography.bodyMedium)
+    }
+}
+
+@Composable
+private fun FeatureLine(emoji: String, title: String, body: String) {
+    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(emoji, style = MaterialTheme.typography.titleMedium)
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(title, style = MaterialTheme.typography.titleSmall)
+            Text(body, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
     }
 }
 
