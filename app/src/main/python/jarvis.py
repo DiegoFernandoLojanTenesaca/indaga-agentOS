@@ -56,6 +56,18 @@ def clear_logs():
     return "cleared"
 
 
+def is_alive():
+    return bool(_thread is not None and _thread.is_alive())
+
+
+def last_beat():
+    """Epoch (s) del último latido del agente; 0 si no arrancó. Lo usa el watchdog."""
+    try:
+        return float(_core.LAST_BEAT["t"]) if _core is not None else 0.0
+    except Exception:
+        return 0.0
+
+
 def _run():
     try:
         _core.main()

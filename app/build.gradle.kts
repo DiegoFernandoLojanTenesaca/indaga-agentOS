@@ -50,9 +50,12 @@ android {
 chaquopy {
     defaultConfig {
         version = "3.13"
-        // Host interpreter Chaquopy uses to compile bytecode + run pip.
-        // Must match major.minor of `version`. /usr/bin/python3.13 exists here.
-        buildPython("/usr/bin/python3.13")
+        // Host interpreter que Chaquopy usa para compilar bytecode + correr pip.
+        // Debe coincidir con major.minor de `version`.
+        //   Windows: launcher `py -3.13`   ·   Linux/Mac: binario python3.13
+        val osName = System.getProperty("os.name").lowercase()
+        if (osName.contains("win")) buildPython("py", "-3.13")
+        else buildPython("/usr/bin/python3.13")
         pip {
             install("requests")
             install("Pillow")   // jarvis_core.shrink() — comprime imágenes para la vision API
@@ -73,6 +76,7 @@ dependencies {
     implementation(libs.androidx.material3)
     implementation(libs.composables.lucide)   // iconos Lucide para Compose
     implementation("org.nanohttpd:nanohttpd:2.3.1")  // AndroidBridge: HTTP localhost para el agente
+    implementation(libs.androidx.security.crypto)     // ConfigStore cifrado (Android Keystore)
 
     debugImplementation(libs.androidx.ui.tooling)
 }

@@ -48,6 +48,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -309,6 +310,12 @@ private fun ConfigScreen(
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun SystemScreen(env: String, running: Boolean) {
+    val ctx = LocalContext.current
+    val store = remember { ConfigStore(ctx) }
+    var ignoringBatt by remember { mutableStateOf(isIgnoringBattery(ctx)) }
+    var autostart by remember { mutableStateOf(store.autostart) }
+    LaunchedEffect(Unit) { ignoringBatt = isIgnoringBattery(ctx) }
+
     Column(
         Modifier.fillMaxSize().padding(20.dp).verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -319,6 +326,49 @@ private fun SystemScreen(env: String, running: Boolean) {
             DetailRow("Arquitectura", Build.SUPPORTED_ABIS.firstOrNull() ?: "—")
             DetailRow("Estado agente", if (running) "Activo" else "Detenido")
         }
+
+        SectionCard("Funcionar 24/7", Lucide.Zap) {
+            Text(
+                "Para que el agente no muera en segundo plano: exonéralo del ahorro de " +
+                    "batería y habilita su autoarranque (clave en Huawei/Xiaomi/Oppo/Vivo).",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text("Reiniciar tras encender el teléfono", style = MaterialTheme.typography.bodyMedium)
+                Switch(checked = autostart, onCheckedChange = { autostart = it; store.autostart = it })
+            }
+            if (ignoringBatt) {
+                Text(
+                    "✅ Optimización de batería desactivada para AgentOS",
+                    color = Green,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            } else {
+                Button(
+                    onClick = { requestIgnoreBattery(ctx) },
+                    modifier = Modifier.fillMaxWidth().height(50.dp),
+                ) {
+                    Icon(Lucide.ShieldCheck, null, Modifier.size(18.dp)); Spacer(Modifier.size(8.dp))
+                    Text("Desactivar optimización de batería")
+                }
+            }
+            OutlinedButton(
+                onClick = { openAutostartSettings(ctx) },
+                modifier = Modifier.fillMaxWidth().height(50.dp),
+            ) {
+                Icon(Lucide.Settings, null, Modifier.size(18.dp)); Spacer(Modifier.size(8.dp))
+                Text("Abrir ajustes de autoarranque")
+            }
+            OutlinedButton(
+                onClick = { openUrl(ctx, "https://dontkillmyapp.com/${Build.MANUFACTURER.lowercase()}") },
+                modifier = Modifier.fillMaxWidth().height(50.dp),
+            ) { Text("Guía para mi fabricante (dontkillmyapp.com)") }
+        }
+
         SectionCard("Modelos de IA", Lucide.Zap) {
             Text("Proveedores soportados (verde = key configurada):", style = MaterialTheme.typography.bodySmall)
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -592,4 +642,64 @@ private fun startAgent(ctx: Context) {
 private fun stopAgent(ctx: Context) {
     ctx.stopService(Intent(ctx, AgentService::class.java))
     AgentState.running.value = false
+}
+
+// ---------- 24/7: batería y autoarranque por fabricante ----------
+private fun isIgnoringBattery(ctx: Context): Boolean {
+    val pm = ctx.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+    return pm.isIgnoringBatteryOptimizations(ctx.packageName)
+}
+
+@android.annotation.SuppressLint("BatteryLife")
+private fun requestIgnoreBattery(ctx: Context) {
+    val direct = Intent(
+        android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+        Uri.parse("package:${ctx.packageName}"),
+    ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    runCatching { ctx.startActivity(direct) }.onFailure {
+        runCatching {
+            ctx.startActivity(
+                Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            )
+        }
+    }
+}
+
+private fun openAutostartSettings(ctx: Context) {
+    // Pantallas de autoarranque conocidas por fabricante; con fallback a los detalles de la app.
+    val candidates = listOf(
+        "com.huawei.systemmanager" to "com.huawei.systemmanager.startupmgr.ui.StartupNormalAppListActivity",
+        "com.huawei.systemmanager" to "com.huawei.systemmanager.optimize.process.ProtectActivity",
+        "com.miui.securitycenter" to "com.miui.permcenter.autostart.AutoStartManagementActivity",
+        "com.coloros.safecenter" to "com.coloros.safecenter.permission.startup.StartupAppListActivity",
+        "com.oppo.safe" to "com.oppo.safe.permission.startup.StartupAppListActivity",
+        "com.vivo.permissionmanager" to "com.vivo.permissionmanager.activity.BgStartUpManagerActivity",
+        "com.letv.android.letvsafe" to "com.letv.android.letvsafe.AutobootManageActivity",
+        "com.samsung.android.lool" to "com.samsung.android.sm.ui.battery.BatteryActivity",
+    )
+    for ((pkg, cls) in candidates) {
+        val ok = runCatching {
+            ctx.startActivity(
+                Intent().setComponent(android.content.ComponentName(pkg, cls))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            )
+            true
+        }.getOrDefault(false)
+        if (ok) return
+    }
+    runCatching {
+        ctx.startActivity(
+            Intent(
+                android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                Uri.parse("package:${ctx.packageName}"),
+            ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+    }
+}
+
+private fun openUrl(ctx: Context, url: String) {
+    runCatching {
+        ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    }
 }
