@@ -92,6 +92,14 @@ def info():
         return json.dumps({"running": False, "error": str(e)})
 
 
+def heatmap():
+    """Dict {fecha: n} de actividad de los últimos ~182 días (26 semanas) en JSON."""
+    try:
+        return json.dumps(_core.activity_map(182)) if _core is not None else json.dumps({})
+    except Exception:
+        return json.dumps({})
+
+
 def _run():
     try:
         _core.main()

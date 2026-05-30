@@ -94,7 +94,27 @@ def db():
     c.execute("CREATE TABLE IF NOT EXISTS diario(id INTEGER PRIMARY KEY AUTOINCREMENT, chat TEXT, fecha TEXT, texto TEXT, ts TEXT)")
     c.execute("CREATE TABLE IF NOT EXISTS listas(id INTEGER PRIMARY KEY AUTOINCREMENT, chat TEXT, nombre TEXT, items TEXT, ts TEXT)")
     c.execute("CREATE TABLE IF NOT EXISTS memoria_lp(id INTEGER PRIMARY KEY AUTOINCREMENT, chat TEXT, role TEXT, content TEXT, ts REAL)")
+    c.execute("CREATE TABLE IF NOT EXISTS actividad(fecha TEXT PRIMARY KEY, n INTEGER)")
     return c
+
+def bump_activity():
+    """Incrementa el contador de requests de HOY (para el heatmap de actividad)."""
+    try:
+        d = datetime.date.today().isoformat()
+        c = db()
+        c.execute("INSERT INTO actividad(fecha,n) VALUES(?,1) ON CONFLICT(fecha) DO UPDATE SET n=n+1", (d,))
+        c.commit(); c.close()
+    except Exception as e:
+        print("bump_activity:", e)
+
+def activity_map(days=182):
+    """Dict {fecha_iso: n} de los últimos `days` días (26 semanas = 182)."""
+    try:
+        since = (datetime.date.today() - datetime.timedelta(days=days - 1)).isoformat()
+        c = db(); rows = c.execute("SELECT fecha,n FROM actividad WHERE fecha>=?", (since,)).fetchall(); c.close()
+        return {f: n for f, n in rows}
+    except Exception:
+        return {}
 
 # ---------- LLM ----------
 def _post(url, key, payload, timeout=90):
@@ -112,6 +132,7 @@ def call_raw(provider, messages, tools=None, model=None, max_tokens=1024):
     u = d.get("usage") or {}
     a = USAGE.setdefault(provider, {"req": 0, "in": 0, "out": 0})
     a["req"] += 1; a["in"] += u.get("prompt_tokens", 0); a["out"] += u.get("completion_tokens", 0)
+    bump_activity()
     return d
 
 def call(provider, messages, model=None, max_tokens=1024):
