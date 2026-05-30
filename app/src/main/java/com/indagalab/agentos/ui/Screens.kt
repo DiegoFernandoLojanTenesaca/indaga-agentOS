@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -11,9 +12,11 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -70,6 +73,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -84,10 +88,14 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.chaquo.python.Python
+import com.composables.icons.lucide.Ban
 import com.composables.icons.lucide.Bell
 import com.composables.icons.lucide.BookOpen
 import com.composables.icons.lucide.Bot
 import com.composables.icons.lucide.Camera
+import com.composables.icons.lucide.Check
+import com.composables.icons.lucide.ChevronDown
+import com.composables.icons.lucide.ChevronRight
 import com.composables.icons.lucide.Cloud
 import com.composables.icons.lucide.Cpu
 import com.composables.icons.lucide.Eye
@@ -97,7 +105,9 @@ import com.composables.icons.lucide.Globe
 import com.composables.icons.lucide.House
 import com.composables.icons.lucide.Info
 import com.composables.icons.lucide.KeyRound
+import com.composables.icons.lucide.Layers
 import com.composables.icons.lucide.List
+import com.composables.icons.lucide.Lock
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.MapPin
 import com.composables.icons.lucide.MessageSquare
@@ -108,6 +118,7 @@ import com.composables.icons.lucide.ScrollText
 import com.composables.icons.lucide.Settings
 import com.composables.icons.lucide.ShieldCheck
 import com.composables.icons.lucide.Smartphone
+import com.composables.icons.lucide.Sparkles
 import com.composables.icons.lucide.Square
 import com.composables.icons.lucide.Trash2
 import com.composables.icons.lucide.Zap
@@ -196,6 +207,11 @@ fun AppScaffold() {
                         Text("AgentOS", style = MaterialTheme.typography.titleLarge)
                     }
                 },
+                actions = {
+                    IconButton(onClick = { tab = 5 }) {
+                        Icon(Lucide.Info, contentDescription = "Acerca", tint = MaterialTheme.colorScheme.onBackground)
+                    }
+                },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                     containerColor = MaterialTheme.colorScheme.background,
                     scrolledContainerColor = MaterialTheme.colorScheme.background,
@@ -209,28 +225,36 @@ fun AppScaffold() {
                 tonalElevation = 0.dp,
             ) {
                 NavigationBarItem(tab == 0, { tab = 0 }, { Icon(Lucide.House, null) }, label = { Text("Inicio") })
-                NavigationBarItem(tab == 1, { tab = 1 }, { Icon(Lucide.Settings, null) }, label = { Text("Config") })
-                NavigationBarItem(tab == 2, { tab = 2 }, { Icon(Lucide.Smartphone, null) }, label = { Text("Sistema") })
-                NavigationBarItem(tab == 3, { tab = 3 }, { Icon(Lucide.ScrollText, null) }, label = { Text("Logs") })
-                NavigationBarItem(tab == 4, { tab = 4 }, { Icon(Lucide.Info, null) }, label = { Text("Acerca") })
+                NavigationBarItem(tab == 1, { tab = 1 }, { Icon(Lucide.Sparkles, null) }, label = { Text("Funciones") })
+                NavigationBarItem(tab == 2, { tab = 2 }, { Icon(Lucide.Settings, null) }, label = { Text("Config") })
+                NavigationBarItem(tab == 3, { tab = 3 }, { Icon(Lucide.Smartphone, null) }, label = { Text("Sistema") })
+                NavigationBarItem(tab == 4, { tab = 4 }, { Icon(Lucide.ScrollText, null) }, label = { Text("Logs") })
             }
         },
     ) { pad ->
         Box(Modifier.padding(pad)) {
-            when (tab) {
-                0 -> HomeScreen(running, token.isNotBlank(), botUser, { startAgent(ctx) }, { stopAgent(ctx) }, { tab = 1 })
-                1 -> ConfigScreen(token, env, { token = it }, { env = it }) {
-                    store.token = token.trim(); store.envBlob = env.trim()
+            AnimatedContent(
+                targetState = tab,
+                transitionSpec = {
+                    (fadeIn(tween(220)) + slideInVertically { it / 14 }) togetherWith fadeOut(tween(140))
+                },
+                label = "tab",
+            ) { t ->
+                when (t) {
+                    0 -> HomeScreen(running, token.isNotBlank(), botUser, { startAgent(ctx) }, { stopAgent(ctx) }, { tab = 2 }, { tab = 1 })
+                    1 -> FuncionesScreen()
+                    2 -> ConfigScreen(token, env, { token = it }, { env = it }) {
+                        store.token = token.trim(); store.envBlob = env.trim()
+                    }
+                    3 -> SystemScreen(env, running)
+                    4 -> LogsScreen(logs)
+                    else -> AboutScreen()
                 }
-                2 -> SystemScreen(env, running)
-                3 -> LogsScreen(logs)
-                else -> AboutScreen()
             }
         }
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun HomeScreen(
     running: Boolean,
@@ -239,37 +263,14 @@ private fun HomeScreen(
     onStart: () -> Unit,
     onStop: () -> Unit,
     onGoConfig: () -> Unit,
+    onGoFunciones: () -> Unit,
 ) {
-    var selectedCap by remember { mutableStateOf<Capability?>(null) }
     Column(
         Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 10.dp).verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(18.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        ElevatedCard(Modifier.fillMaxWidth()) {
-            Column(
-                Modifier.fillMaxWidth().padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Box(
-                    Modifier.size(76.dp).clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(Lucide.Bot, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(42.dp))
-                }
-                StatusPill(running)
-                if (running && botUser != null) {
-                    Text("Conectado como $botUser", style = MaterialTheme.typography.titleSmall)
-                }
-                Text(
-                    if (running) "Tu asistente personal está activo y atento."
-                    else "Un asistente brillante en tu bolsillo,\nlisto para ayudarte 24/7.",
-                    style = MaterialTheme.typography.bodyLarge,
-                    textAlign = TextAlign.Center,
-                )
-            }
-        }
+        Spacer(Modifier.height(6.dp))
+        AgentHero(running, botUser)
 
         if (running) {
             OutlinedButton(onClick = onStop, modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp)) {
@@ -285,8 +286,99 @@ private fun HomeScreen(
             }
         }
 
-        Text("Lo que puede hacer", style = MaterialTheme.typography.titleMedium)
-        Text("Tocá cualquiera para ver qué hace.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Card(
+            Modifier.fillMaxWidth().clickable { onGoFunciones() },
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        ) {
+            Row(
+                Modifier.padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                Box(
+                    Modifier.size(46.dp).clip(RoundedCornerShape(13.dp))
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)),
+                    contentAlignment = Alignment.Center,
+                ) { Icon(Lucide.Sparkles, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp)) }
+                Column(Modifier.weight(1f)) {
+                    Text("Funciones", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "Chat, fotos, GPS, SMS, recordatorios y más — tocá para verlas.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Icon(Lucide.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+    }
+}
+
+@Composable
+private fun AgentHero(running: Boolean, botUser: String?) {
+    val infinite = rememberInfiniteTransition(label = "hero")
+    val glow by infinite.animateFloat(
+        initialValue = if (running) 0.30f else 0.16f,
+        targetValue = if (running) 0.08f else 0.12f,
+        animationSpec = infiniteRepeatable(tween(1700), RepeatMode.Reverse),
+        label = "glow",
+    )
+    val scale by infinite.animateFloat(
+        initialValue = 1f,
+        targetValue = if (running) 1.10f else 1.03f,
+        animationSpec = infiniteRepeatable(tween(1700), RepeatMode.Reverse),
+        label = "scale",
+    )
+    ElevatedCard(Modifier.fillMaxWidth()) {
+        Column(
+            Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 28.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Box(
+                    Modifier.size(116.dp).scale(scale).clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = glow)),
+                )
+                Box(
+                    Modifier.size(82.dp).clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)),
+                    contentAlignment = Alignment.Center,
+                ) { Icon(Lucide.Bot, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(44.dp)) }
+            }
+            StatusPill(running)
+            if (running && botUser != null) {
+                Text("Conectado como $botUser", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+            }
+            Text(
+                if (running) "Tu asistente está activo y atento, 24/7."
+                else "Tu asistente personal, listo para vivir\nen tu teléfono y ayudarte 24/7.",
+                style = MaterialTheme.typography.bodyLarge,
+                textAlign = TextAlign.Center,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun FuncionesScreen() {
+    var selectedCap by remember { mutableStateOf<Capability?>(null) }
+    Column(
+        Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 10.dp).verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Spacer(Modifier.height(4.dp))
+        Text("Lo que puede hacer", style = MaterialTheme.typography.titleLarge)
+        Text(
+            "Todo se controla por Telegram. Tocá una función para ver el detalle.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(4.dp))
         FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             CAPABILITIES.forEach { c -> CapabilityChip(c) { selectedCap = c } }
         }
@@ -346,7 +438,7 @@ private fun ConfigScreen(
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.weight(1f),
                 )
-                Text(if (howOpen) "▾" else "▸", color = MaterialTheme.colorScheme.primary)
+                Icon(if (howOpen) Lucide.ChevronDown else Lucide.ChevronRight, null, tint = MaterialTheme.colorScheme.primary)
             }
             if (howOpen) {
                 Text(
@@ -418,11 +510,10 @@ private fun SystemScreen(env: String, running: Boolean) {
                 Switch(checked = autostart, onCheckedChange = { autostart = it; store.autostart = it })
             }
             if (ignoringBatt) {
-                Text(
-                    "✓ Optimización de batería desactivada",
-                    color = Green,
-                    style = MaterialTheme.typography.bodyMedium,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Icon(Lucide.Check, null, tint = Green, modifier = Modifier.size(18.dp))
+                    Text("Optimización de batería desactivada", color = Green, style = MaterialTheme.typography.bodyMedium)
+                }
             } else {
                 Button(
                     onClick = { requestIgnoreBattery(ctx) },
@@ -524,10 +615,10 @@ private fun AboutScreen() {
             )
         }
         SectionCard("Por qué es diferente", Lucide.ShieldCheck) {
-            FeatureLine("🚫", "Cero Google", "Corre en Huawei, ROMs de-Googled y cualquier Android 8+, sin Play Services ni Firebase.")
-            FeatureLine("🔒", "Privado", "Tus claves y datos viven cifrados en el teléfono (Android Keystore). Nada obligatorio en la nube.")
-            FeatureLine("🔋", "24/7 de verdad", "Servicio en segundo plano con auto-arranque al encender y watchdog que lo revive si se cae.")
-            FeatureLine("🧩", "Multi-IA gratis", "Elegís entre Groq, Gemini, Cohere, Mistral y más — con failover automático entre ellos.")
+            FeatureLine(Lucide.Ban, "Cero Google", "Corre en Huawei, ROMs de-Googled y cualquier Android 8+, sin Play Services ni Firebase.")
+            FeatureLine(Lucide.Lock, "Privado", "Tus claves y datos viven cifrados en el teléfono (Android Keystore). Nada obligatorio en la nube.")
+            FeatureLine(Lucide.Zap, "24/7 de verdad", "Servicio en segundo plano con auto-arranque al encender y watchdog que lo revive si se cae.")
+            FeatureLine(Lucide.Layers, "Multi-IA gratis", "Elegís entre Groq, Gemini, Cohere, Mistral y más — con failover automático entre ellos.")
         }
         SectionCard("Tecnología", Lucide.Cpu) {
             DetailRow("Motor", "Python 3.13 (Chaquopy)")
@@ -636,9 +727,11 @@ private fun DetailRow(label: String, value: String) {
 }
 
 @Composable
-private fun FeatureLine(emoji: String, title: String, body: String) {
-    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(emoji, style = MaterialTheme.typography.titleMedium)
+private fun FeatureLine(icon: ImageVector, title: String, body: String) {
+    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.Top) {
+        Box(Modifier.size(34.dp).clip(RoundedCornerShape(9.dp)).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)), contentAlignment = Alignment.Center) {
+            Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+        }
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(title, style = MaterialTheme.typography.titleSmall)
             Text(body, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -851,7 +944,7 @@ private fun KeysGuideCard(env: String, onEnvChange: (String) -> Unit) {
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.weight(1f),
                 )
-                Text(if (open) "▾" else "▸", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Icon(if (open) Lucide.ChevronDown else Lucide.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             if (open) {
                 Text(
