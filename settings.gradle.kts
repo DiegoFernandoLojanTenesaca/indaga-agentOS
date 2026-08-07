@@ -30,3 +30,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "AgentOS"
 include(":app")
+include(":llama")

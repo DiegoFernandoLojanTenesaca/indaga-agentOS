@@ -10,6 +10,7 @@ lucide = "1.1.0"
 security-crypto = "1.1.0-alpha06"
 
 [libraries]
+coil-compose = { group = "io.coil-kt", name = "coil-compose", version = "2.7.0" }
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "core-ktx" }
 androidx-lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "lifecycle" }
 androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activity-compose" }
@@ -24,6 +25,7 @@ androidx-security-crypto = { group = "androidx.security", name = "security-crypt
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
+android-library = { id = "com.android.library", version.ref = "agp" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 chaquopy = { id = "com.chaquo.python", version.ref = "chaquopy" }

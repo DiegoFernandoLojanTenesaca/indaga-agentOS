@@ -12,8 +12,11 @@ release/
 .gradle/
 build/
 app/build/
-app/.cxx/
+.cxx/
 obj/
+*.o
+*.a
+*.so
 
 # SDK path local
 local.properties

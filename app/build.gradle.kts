@@ -55,6 +55,18 @@ android {
         compose = true
         buildConfig = true
     }
+
+    // ggml carga sus backends por ruta con dlopen (GGML_BACKEND_DL=ON). Desde
+    // AGP 3.6 las .so viajan comprimidas dentro del APK y lib/arm64 queda
+    // VACÍO, así que llama.cpp arrancaba con "no backends are loaded".
+    // Esto las extrae al disco al instalar. Cuesta ~20 MB de espacio en el
+    // dispositivo; es el precio de tener backends dinámicos por CPU.
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
+
 }
 
 // --- Python runtime (Chaquopy) ---
@@ -77,6 +89,8 @@ chaquopy {
 
 dependencies {
     implementation(libs.androidx.core.ktx)
+    implementation(project(":llama"))   // inferencia local (llama.cpp)
+    implementation(libs.coil.compose)   // miniaturas de PalsHub
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
 
