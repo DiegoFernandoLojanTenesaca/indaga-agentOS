@@ -21,9 +21,11 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.offset
@@ -79,8 +81,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
@@ -134,16 +140,30 @@ import com.indagalab.agentos.R
 import com.indagalab.agentos.data.ConfigStore
 import com.indagalab.agentos.service.AgentService
 import com.indagalab.agentos.service.AgentState
+import com.indagalab.agentos.ui.pixel.ACENTO
+import com.indagalab.agentos.ui.pixel.AgentRoom
+import com.indagalab.agentos.ui.pixel.Agente
+import com.indagalab.agentos.ui.pixel.Estado
+import com.indagalab.agentos.ui.pixel.PARED
+import com.indagalab.agentos.ui.pixel.SPRITE_ROBOT
+import com.indagalab.agentos.ui.pixel.SUELO_B
+import com.indagalab.agentos.ui.pixel.Sala
+import com.indagalab.agentos.ui.pixel.agentesDesde
+import com.indagalab.agentos.ui.pixel.drawSprite
+import com.indagalab.agentos.ui.pixel.drawSpriteFooted
+import com.indagalab.agentos.ui.pixel.textoPixel
+import com.indagalab.agentos.ui.pixel.tileDiamond
 import java.time.LocalDate
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import org.json.JSONObject
 
 private val Green = Color(0xFF16A34A)
 private val CONNECTED = Regex("Conectado como (@\\S+)")
 
-private data class Capability(val icon: ImageVector, val label: String, val ready: Boolean, val desc: String)
+internal data class Capability(val icon: ImageVector, val label: String, val ready: Boolean, val desc: String)
 
-private val CAPABILITIES = listOf(
+internal val CAPABILITIES = listOf(
     Capability(Lucide.Bot, "Chat con IA", true, "Conversa con la IA por Telegram: preguntas, redacción, traducción y código. Tú eliges el proveedor (Groq, Gemini, Cohere…) y el modo (normal, profesor, coder)."),
     Capability(Lucide.Bell, "Recordatorios", true, "Pídele «recuérdame en 30 min sacar la ropa» y te avisa a tiempo. Soporta minutos, horas o una hora puntual."),
     Capability(Lucide.List, "Listas", true, "Listas con casillas marcables (compras, tareas, lo que sea), editables desde el chat con botones."),
@@ -152,7 +172,7 @@ private val CAPABILITIES = listOf(
     Capability(Lucide.Globe, "Búsqueda web", true, "Busca en internet y te resume citando fuentes. También resume cualquier URL o video que le envíes."),
     Capability(Lucide.FileText, "Leer PDFs", true, "Envíale un PDF por Telegram y lo lee para responder preguntas sobre su contenido."),
     Capability(Lucide.Camera, "Cámara", true, "Toma fotos o selfies con la cámara del teléfono y la IA describe lo que ve. Incluye vigilancia y antirrobo con reconocimiento."),
-    Capability(Lucide.MapPin, "Ubicación", true, "Te da la ubicación GPS del teléfono con enlace a mapas — clave si lo pierdes o te lo roban."),
+    Capability(Lucide.MapPin, "Ubicación", true, "Te da la ubicación GPS del teléfono con enlace a mapas. Clave si lo pierdes o te lo roban."),
     Capability(Lucide.MessageSquare, "SMS", true, "Lee y envía SMS desde el chat, y te reenvía automáticamente los códigos OTP que llegan a tu SIM."),
     Capability(Lucide.Mic, "Voz", true, "Envíale notas de voz (las transcribe con IA) y puede responderte hablando por el altavoz del teléfono."),
 )
@@ -183,8 +203,14 @@ fun AppScaffold() {
         WelcomeScreen(onStart = { store.onboarded = true; onboarded = true })
         return
     }
-    var tab by remember { mutableStateOf(0) }
-    var prevTab by remember { mutableStateOf(0) }
+
+    // Navegación por módulos con panel lateral derecho. Antes eran 5 pestañas
+    // abajo y cada una amontonaba temas distintos; ahora un módulo = una idea.
+    var modulo by remember { mutableStateOf(Modulo.SALA) }
+    val drawer = androidx.compose.material3.rememberDrawerState(
+        androidx.compose.material3.DrawerValue.Closed)
+    val scopeUi = androidx.compose.runtime.rememberCoroutineScope()
+
     var token by remember { mutableStateOf(store.token) }
     var env by remember { mutableStateOf(store.envBlob) }
     var logs by remember { mutableStateOf("—") }
@@ -205,64 +231,68 @@ fun AppScaffold() {
         }
     }
 
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            CenterAlignedTopAppBar(
-                title = {
-                    Text(if (tab == 5) "Acerca" else "AgentOS", style = MaterialTheme.typography.titleLarge)
-                },
-                navigationIcon = {
-                    if (tab == 5) {
-                        IconButton(onClick = { tab = prevTab }) {
-                            Icon(Lucide.ArrowLeft, contentDescription = "Volver", tint = MaterialTheme.colorScheme.onBackground)
-                        }
-                    }
-                },
-                actions = {
-                    if (tab != 5) {
-                        IconButton(onClick = { prevTab = tab; tab = 5 }) {
-                            Icon(Lucide.Info, contentDescription = "Acerca", tint = MaterialTheme.colorScheme.onBackground)
-                        }
-                    }
-                },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background,
-                    scrolledContainerColor = MaterialTheme.colorScheme.background,
-                    titleContentColor = MaterialTheme.colorScheme.onBackground,
-                ),
-            )
-        },
-        bottomBar = {
-            NavigationBar(
-                containerColor = MaterialTheme.colorScheme.background,
-                tonalElevation = 0.dp,
-            ) {
-                NavigationBarItem(selected = tab == 0, onClick = { tab = 0 }, icon = { Icon(Lucide.House, null) }, label = { Text("Inicio", maxLines = 1, softWrap = false, style = MaterialTheme.typography.labelSmall) }, alwaysShowLabel = false)
-                NavigationBarItem(selected = tab == 1, onClick = { tab = 1 }, icon = { Icon(Lucide.LayoutGrid, null) }, label = { Text("Funciones", maxLines = 1, softWrap = false, style = MaterialTheme.typography.labelSmall) }, alwaysShowLabel = false)
-                NavigationBarItem(selected = tab == 2, onClick = { tab = 2 }, icon = { Icon(Lucide.Settings, null) }, label = { Text("Config", maxLines = 1, softWrap = false, style = MaterialTheme.typography.labelSmall) }, alwaysShowLabel = false)
-                NavigationBarItem(selected = tab == 3, onClick = { tab = 3 }, icon = { Icon(Lucide.Smartphone, null) }, label = { Text("Sistema", maxLines = 1, softWrap = false, style = MaterialTheme.typography.labelSmall) }, alwaysShowLabel = false)
-                NavigationBarItem(selected = tab == 4, onClick = { tab = 4 }, icon = { Icon(Lucide.ScrollText, null) }, label = { Text("Logs", maxLines = 1, softWrap = false, style = MaterialTheme.typography.labelSmall) }, alwaysShowLabel = false)
+    DrawerDerecho(
+        estado = drawer,
+        panel = {
+            PanelModulos(actual = modulo) { m ->
+                modulo = m
+                scopeUi.launch { drawer.close() }
             }
         },
-    ) { pad ->
-        Box(Modifier.padding(pad)) {
-            AnimatedContent(
-                targetState = tab,
-                transitionSpec = {
-                    (fadeIn(tween(220)) + slideInVertically { it / 14 }) togetherWith fadeOut(tween(140))
-                },
-                label = "tab",
-            ) { t ->
-                when (t) {
-                    0 -> HomeScreen(running, token.isNotBlank(), botUser, info, { startAgent(ctx) }, { stopAgent(ctx) }, { tab = 2 }, { tab = 1 })
-                    1 -> FuncionesScreen()
-                    2 -> ConfigScreen(token, env, { token = it }, { env = it }) {
-                        store.token = token.trim(); store.envBlob = env.trim()
+    ) {
+        Scaffold(
+            containerColor = MaterialTheme.colorScheme.background,
+            topBar = {
+                CenterAlignedTopAppBar(
+                    title = { Text(modulo.titulo, style = MaterialTheme.typography.titleLarge) },
+                    navigationIcon = {
+                        // Vuelta directa a la sala: con navegación por panel, sin
+                        // esto hay que abrir el menú cada vez para volver a casa.
+                        if (modulo != Modulo.SALA) {
+                            IconButton(onClick = { modulo = Modulo.SALA }) {
+                                Icon(Lucide.House, contentDescription = "Ir a la sala",
+                                    tint = MaterialTheme.colorScheme.onBackground)
+                            }
+                        }
+                    },
+                    actions = { BotonMenu { scopeUi.launch { drawer.open() } } },
+                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.background,
+                        scrolledContainerColor = MaterialTheme.colorScheme.background,
+                        titleContentColor = MaterialTheme.colorScheme.onBackground,
+                    ),
+                )
+            },
+        ) { pad ->
+            Box(Modifier.padding(pad)) {
+                AnimatedContent(
+                    targetState = modulo,
+                    transitionSpec = {
+                        (fadeIn(tween(220)) + slideInVertically { it / 14 }) togetherWith fadeOut(tween(140))
+                    },
+                    label = "modulo",
+                ) { m ->
+                    when (m) {
+                        Modulo.SALA -> HomeScreen(
+                            running, token.isNotBlank(), botUser, info,
+                            { startAgent(ctx) }, { stopAgent(ctx) },
+                            { modulo = Modulo.BOT }, { modulo = Modulo.FUNCIONES },
+                        )
+                        Modulo.REGISTRO -> ModRegistro(logs)
+                        Modulo.EQUIPO -> EquipoScreen(
+                            agentesDeLaSala(running, ctx).map { it.nombre })
+                        Modulo.ACTIVIDAD -> ModActividad(info, running)
+                        Modulo.CHAT -> ChatLocalScreen()
+                        Modulo.PALS -> PalsScreen()
+                        Modulo.MODELO_LOCAL -> ModModeloLocal()
+                        Modulo.PROVEEDORES -> ModProveedores(env, running, info, { env = it }) { store.envBlob = env.trim() }
+                        Modulo.BOT -> ModBot(token, { token = it }) { store.token = token.trim() }
+                        Modulo.CLAVES -> ModClaves(env, { env = it }) { store.envBlob = env.trim() }
+                        Modulo.DISPOSITIVO -> ModDispositivo(running)
+                        Modulo.VEINTICUATRO_SIETE -> ModVeinticuatroSiete()
+                        Modulo.FUNCIONES -> ModFunciones()
+                        Modulo.ACERCA -> ModAcerca()
                     }
-                    3 -> SystemScreen(env, running, info)
-                    4 -> LogsScreen(logs)
-                    else -> AboutScreen()
                 }
             }
         }
@@ -280,58 +310,129 @@ private fun HomeScreen(
     onGoConfig: () -> Unit,
     onGoFunciones: () -> Unit,
 ) {
-    Column(
-        Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 10.dp).verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        Spacer(Modifier.height(6.dp))
-        AgentHero(running, botUser)
-        val stats = remember(info) { runCatching { JSONObject(info) }.getOrNull() }
-        if (running && stats != null && stats.optBoolean("running", false)) {
-            StatsCard(stats)
+    // La sala manda: ocupa lo que puede y el resto es una franja de acción.
+    // Antes competía con una card de "Funciones" y un bloque de stats que
+    // empujaban la escena a un tercio de la pantalla.
+    val ctxSala = LocalContext.current
+    val skinsGuardados = remember { com.indagalab.agentos.ui.pixel.Skins.cargar(ctxSala) }
+    // La sala se repinta cada pocos segundos: si le hablas a un agente desde
+    // el chat, se le ve subir a su puesto sin tener que salir y volver.
+    var tic by remember { mutableStateOf(0L) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            tic = System.currentTimeMillis()
+            kotlinx.coroutines.delay(4000)
         }
+    }
+    val agentesDemo = remember(running, tic / 4000) {
+        agentesDeLaSala(running, ctxSala)
+    }
 
-        if (running) {
-            OutlinedButton(onClick = onStop, modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp)) {
-                Icon(Lucide.Square, null, Modifier.size(18.dp)); Spacer(Modifier.size(8.dp)); Text("Detener agente")
+    // El edificio, planta a planta. Seis por planta: con más, los nombres se
+    // pisan y la escena deja de leerse. La mayoría son oficinas; abajo del todo
+    // están las salas a las que bajan los que no tienen tarea.
+    val porPlanta = 6
+    val plantas = remember(agentesDemo) {
+        // Las oficinas llevan a TODOS: quien está abajo en la piscina deja su
+        // silla vacía arriba. Es lo que hace que el edificio se lea como un
+        // sitio con gente moviéndose y no como dos listas separadas.
+        val descansando = agentesDemo.filter { it.estado == Estado.DURMIENDO }
+        val ocio = listOf(
+            "Descanso" to Sala.DESCANSO,
+            "Piscina" to Sala.PISCINA,
+            "Aseos" to Sala.ASEOS,
+        )
+        buildList {
+            agentesDemo.chunked(porPlanta).forEachIndexed { i, grupo ->
+                add(Triple("Planta ${i + 1}", grupo, Sala.OFICINA))
             }
-        } else if (configured) {
-            Button(onClick = onStart, modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp)) {
-                Icon(Lucide.Play, null, Modifier.size(18.dp)); Spacer(Modifier.size(8.dp)); Text("Iniciar agente")
+            descansando.chunked(porPlanta).forEachIndexed { i, grupo ->
+                val (nombre, tipo) = ocio[i % ocio.size]
+                val vuelta = i / ocio.size
+                add(Triple(if (vuelta == 0) nombre else "$nombre ${vuelta + 1}", grupo, tipo))
             }
-        } else {
-            FilledTonalButton(onClick = onGoConfig, modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp)) {
-                Icon(Lucide.Settings, null, Modifier.size(18.dp)); Spacer(Modifier.size(8.dp)); Text("Configura tu bot primero")
-            }
-        }
+        }.ifEmpty { listOf(Triple("Planta 1", emptyList(), Sala.OFICINA)) }
+    }
 
-        Card(
-            Modifier.fillMaxWidth().clickable { onGoFunciones() },
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-        ) {
-            Row(
-                Modifier.padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(14.dp),
-            ) {
-                Box(
-                    Modifier.size(46.dp).clip(RoundedCornerShape(13.dp))
-                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)),
-                    contentAlignment = Alignment.Center,
-                ) { Icon(Lucide.LayoutGrid, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp)) }
-                Column(Modifier.weight(1f)) {
-                    Text("Funciones", style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        "Chat, fotos, GPS, SMS, recordatorios y más — toca para verlas.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+    val stats = remember(info) { runCatching { JSONObject(info) }.getOrNull() }
+    val proveedor = stats?.optString("provider")?.ifBlank { null }
+
+    val pager = androidx.compose.foundation.pager.rememberPagerState { plantas.size }
+
+    Column(Modifier.fillMaxSize()) {
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+            // Carrusel: se desliza de planta en planta como un álbum de fotos.
+            androidx.compose.foundation.pager.HorizontalPager(
+                state = pager,
+                modifier = Modifier.fillMaxSize(),
+            ) { pagina ->
+            val (titulo, deLaPlanta, tipoSala) = plantas[pagina]
+            AgentRoom(
+                agentes = deLaPlanta,
+                proveedor = if (running) proveedor ?: "local" else null,
+                modifier = Modifier.fillMaxSize(),
+                skins = skinsGuardados,
+                estado = if (running) botUser?.let { "en marcha · $it" } ?: "en marcha"
+                         else "detenido",
+                activo = running,
+                piso = pagina,
+                sala = tipoSala,
+                totales = agentesDemo.size,
+                titulo = titulo,
+                // Los que acaban de recibir un mensaje entran andando.
+                reciénLlegados = remember(tic / 4000) {
+                    Actividad.leer(ctxSala)
+                        .filterValues { System.currentTimeMillis() - it < 12_000L }
+                        .keys
+                },
+            )
+            }
+
+            // Puntos del carrusel: dónde estás y cuántas plantas hay.
+            if (plantas.size > 1) {
+                Row(
+                    Modifier.align(Alignment.BottomCenter).padding(bottom = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    plantas.indices.forEach { i ->
+                        val aqui = i == pager.currentPage
+                        Box(
+                            Modifier.size(if (aqui) 8.dp else 6.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    if (aqui) MaterialTheme.colorScheme.primary
+                                    else Color(0xFF6B5B4C)
+                                )
+                        )
+                    }
                 }
-                Icon(Lucide.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
-        Spacer(Modifier.height(8.dp))
+
+        Column(
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            if (running) {
+                OutlinedButton(onClick = onStop, modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp)) {
+                    Icon(Lucide.Square, null, Modifier.size(18.dp)); Spacer(Modifier.size(8.dp))
+                    Text("Detener agente")
+                }
+            } else if (configured) {
+                Button(onClick = onStart, modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp)) {
+                    Icon(Lucide.Play, null, Modifier.size(18.dp)); Spacer(Modifier.size(8.dp))
+                    Text("Iniciar agente")
+                }
+            } else {
+                Button(onClick = onGoConfig, modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp)) {
+                    Icon(Lucide.Settings, null, Modifier.size(18.dp)); Spacer(Modifier.size(8.dp))
+                    Text("Configura tu bot para empezar")
+                }
+            }
+            if (running && stats != null && stats.optBoolean("running", false)) {
+                StatsCard(stats)
+            }
+        }
     }
 }
 
@@ -410,25 +511,6 @@ private fun AgentHero(running: Boolean, botUser: String?) {
 }
 
 @Composable
-private fun FuncionesScreen() {
-    Column(
-        Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 10.dp).verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Spacer(Modifier.height(4.dp))
-        Text("Lo que puede hacer", style = MaterialTheme.typography.titleLarge)
-        Text(
-            "Tu agente con superpoderes. Todo se controla por Telegram.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(Modifier.height(2.dp))
-        CAPABILITIES.forEach { cap -> FeatureCard(cap) }
-        Spacer(Modifier.height(8.dp))
-    }
-}
-
-@Composable
 private fun FeatureCard(cap: Capability) {
     Card(
         Modifier.fillMaxWidth(),
@@ -454,113 +536,14 @@ private fun FeatureCard(cap: Capability) {
 }
 
 @Composable
-private fun ConfigScreen(
-    token: String,
-    env: String,
-    onTokenChange: (String) -> Unit,
-    onEnvChange: (String) -> Unit,
-    onSave: () -> Unit,
-) {
-    var saved by remember { mutableStateOf(false) }
-    var tokenVisible by remember { mutableStateOf(false) }
-    var howOpen by remember { mutableStateOf(false) }
-    Column(
-        Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 10.dp).verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        SectionCard("Bot de Telegram", Lucide.Bot) {
-            OutlinedTextField(
-                value = token,
-                onValueChange = { onTokenChange(it); saved = false },
-                label = { Text("Bot Token") },
-                singleLine = true,
-                visualTransformation = if (tokenVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                trailingIcon = {
-                    IconButton(onClick = { tokenVisible = !tokenVisible }) {
-                        Icon(
-                            if (tokenVisible) Lucide.EyeOff else Lucide.Eye,
-                            contentDescription = if (tokenVisible) "Ocultar token" else "Ver token",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                },
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Row(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable { howOpen = !howOpen },
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    "¿Cómo consigo el token?",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.weight(1f),
-                )
-                Icon(if (howOpen) Lucide.ChevronDown else Lucide.ChevronRight, null, tint = MaterialTheme.colorScheme.primary)
-            }
-            if (howOpen) {
-                Text(
-                    "1) En Telegram abre @BotFather.\n" +
-                        "2) Envía /newbot y sigue los pasos (nombre + @usuario del bot).\n" +
-                        "3) Te da un token tipo 123456789:AAE… — pégalo arriba.\n" +
-                        "4) Escríbele a tu bot: el primer chat que escribe queda como dueño.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            } else {
-                Text("Lo da @BotFather en Telegram.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
-        SectionCard("Variables y API keys", Lucide.KeyRound) {
-            OutlinedTextField(
-                value = env,
-                onValueChange = { onEnvChange(it); saved = false },
-                label = { Text("KEY=VALOR por línea") },
-                placeholder = { Text("OWNER_ID=...\nGROQ_API_KEY=...\nCITY=Loja") },
-                minLines = 6,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Text("OWNER_ID, GROQ_API_KEY, CITY… una por línea.", style = MaterialTheme.typography.bodySmall)
-        }
-        Button(onClick = { onSave(); saved = true }, modifier = Modifier.fillMaxWidth().height(52.dp)) {
-            Icon(Lucide.Save, null, Modifier.size(18.dp)); Spacer(Modifier.size(8.dp)); Text("Guardar configuración")
-        }
-        if (saved) {
-            Text("Guardado. Detén e inicia el agente para aplicar.", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodyMedium)
-        }
-        Text("Las claves se guardan solo en este dispositivo (cifradas).", style = MaterialTheme.typography.bodySmall)
-        KeysGuideCard(env, onEnvChange)
-    }
-}
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun SystemScreen(env: String, running: Boolean, info: String) {
+internal fun ModVeinticuatroSiete() {
     val ctx = LocalContext.current
     val store = remember { ConfigStore(ctx) }
     var ignoringBatt by remember { mutableStateOf(isIgnoringBattery(ctx)) }
     var autostart by remember { mutableStateOf(store.autostart) }
-    var heat by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
-    LaunchedEffect(Unit) {
-        ignoringBatt = isIgnoringBattery(ctx)
-        heat = runCatching {
-            val s = Python.getInstance().getModule("jarvis").callAttr("heatmap").toString()
-            val o = JSONObject(s)
-            o.keys().asSequence().associateWith { o.optInt(it) }
-        }.getOrDefault(emptyMap())
-    }
+    LaunchedEffect(Unit) { ignoringBatt = isIgnoringBattery(ctx) }
 
-    Column(
-        Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 10.dp).verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        SectionCard("Dispositivo", Lucide.Smartphone) {
-            DetailRow("Modelo", "${Build.MANUFACTURER} ${Build.MODEL}")
-            DetailRow("Android", "${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
-            DetailRow("Arquitectura", Build.SUPPORTED_ABIS.firstOrNull() ?: "—")
-            DetailRow("Estado agente", if (running) "Activo" else "Detenido")
-        }
-
+    ColumnaModulo {
         SectionCard("Funcionar 24/7", Lucide.Zap) {
             Text(
                 "Para que el agente no muera en segundo plano: exonéralo del ahorro de " +
@@ -601,155 +584,24 @@ private fun SystemScreen(env: String, running: Boolean, info: String) {
                 modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp),
             ) { Text("Guía anti-cierre (dontkillmyapp)") }
         }
-
-        SectionCard("Modelos de IA", Lucide.Zap) {
-            val active = remember(info) { runCatching { JSONObject(info).optString("provider") }.getOrNull().orEmpty() }
-            if (running && active.isNotBlank()) {
-                Text("Proveedor activo: $active", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
-            }
-            Text("Verde = key configurada. El activo se resalta cuando el agente está corriendo.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                PROVIDERS.forEach { p ->
-                    val on = env.lineSequence().any {
-                        val parts = it.split("=", limit = 2)
-                        parts.size == 2 && parts[0].trim() == p.envKey && parts[1].trim().isNotBlank()
-                    }
-                    val isActive = running && active.isNotBlank() &&
-                        p.name.lowercase().replace(".", "").replace(" ", "") == active
-                    ProviderChip(p.name, on, isActive)
-                }
-            }
-        }
-
-        SectionCard("Actividad", Lucide.Activity) {
-            Text(
-                "Requests del agente por día — últimas 26 semanas. Verde más fuerte = más actividad.",
-                style = MaterialTheme.typography.bodySmall,
-            )
-            ActivityHeatmap(heat)
-        }
     }
 }
 
 @Composable
-private fun ActivityHeatmap(map: Map<String, Int>) {
-    val today = remember { LocalDate.now() }
-    Row(
-        Modifier.horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(3.dp),
-    ) {
-        for (week in 0 until 26) {
-            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                for (day in 0 until 7) {
-                    val i = week * 7 + day
-                    val date = today.minusDays((181 - i).toLong()).toString()
-                    val n = map[date] ?: 0
-                    val color = when {
-                        n <= 0 -> MaterialTheme.colorScheme.surfaceVariant
-                        n < 3 -> MaterialTheme.colorScheme.primary.copy(alpha = 0.30f)
-                        n < 8 -> MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)
-                        n < 20 -> MaterialTheme.colorScheme.primary.copy(alpha = 0.78f)
-                        else -> MaterialTheme.colorScheme.primary
-                    }
-                    Box(Modifier.size(11.dp).clip(RoundedCornerShape(3.dp)).background(color))
-                }
-            }
-        }
-    }
+internal fun ModModeloLocal() {
+    LocalModelSection()
 }
 
+/** Envoltorio común: scroll y márgenes iguales en todos los módulos. */
 @Composable
-private fun LogsScreen(logs: String) {
-    val scroll = rememberScrollState()
-    val clip = LocalClipboardManager.current
-    LaunchedEffect(logs) { scroll.scrollTo(scroll.maxValue) }
-    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Icon(Lucide.ScrollText, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-                Text("Actividad", style = MaterialTheme.typography.titleMedium)
-            }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = { clip.setText(AnnotatedString(logs)) }) {
-                    Text("Copiar", style = MaterialTheme.typography.labelMedium)
-                }
-                IconButton(onClick = {
-                    try { Python.getInstance().getModule("jarvis").callAttr("clear_logs") } catch (_: Exception) {}
-                }) { Icon(Lucide.Trash2, contentDescription = "Limpiar", tint = MaterialTheme.colorScheme.onSurfaceVariant) }
-            }
-        }
-        Surface(tonalElevation = 2.dp, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxSize()) {
-            Text(
-                logs,
-                modifier = Modifier.fillMaxSize().padding(12.dp).verticalScroll(scroll),
-                style = MaterialTheme.typography.bodySmall,
-                fontFamily = FontFamily.Monospace,
-            )
-        }
-    }
-}
-
-@Composable
-private fun AboutScreen() {
-    val ctx = LocalContext.current
+internal fun ColumnaModulo(contenido: @Composable () -> Unit) {
     Column(
-        Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 10.dp).verticalScroll(rememberScrollState()),
+        Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 10.dp)
+            .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Image(
-                painter = painterResource(R.mipmap.ic_launcher),
-                contentDescription = null,
-                modifier = Modifier.size(76.dp).clip(RoundedCornerShape(18.dp)),
-            )
-            Text("AgentOS", style = MaterialTheme.typography.headlineSmall)
-            Text("Versión ${BuildConfig.VERSION_NAME}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Surface(color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), shape = RoundedCornerShape(50)) {
-                Text(
-                    "Creado por Indaga Lab",
-                    Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
-                    color = MaterialTheme.colorScheme.primary,
-                    style = MaterialTheme.typography.labelLarge,
-                )
-            }
-        }
-        SectionCard("Qué es", Lucide.Bot) {
-            Text(
-                "AgentOS es tu asistente de IA personal viviendo DENTRO del teléfono. Lo controlas " +
-                    "100% por Telegram: te responde, recuerda, organiza, lee PDFs, toma fotos, ve tu " +
-                    "ubicación, lee y envía SMS, y automatiza tu día — 24/7, sin depender de la nube " +
-                    "de nadie más que el modelo de IA que tú elijas.",
-                style = MaterialTheme.typography.bodyMedium,
-            )
-        }
-        SectionCard("Por qué es diferente", Lucide.ShieldCheck) {
-            FeatureLine(Lucide.Ban, "Cero Google", "Corre en Huawei, ROMs de-Googled y cualquier Android 8+, sin Play Services ni Firebase.")
-            FeatureLine(Lucide.Lock, "Privado", "Tus claves y datos viven cifrados en el teléfono (Android Keystore). Nada obligatorio en la nube.")
-            FeatureLine(Lucide.Zap, "24/7 de verdad", "Servicio en segundo plano con auto-arranque al encender y watchdog que lo revive si se cae.")
-            FeatureLine(Lucide.Layers, "Multi-IA gratis", "Eliges entre Groq, Gemini, Cohere, Mistral y más — con failover automático entre ellos.")
-        }
-        SectionCard("Tecnología", Lucide.Cpu) {
-            DetailRow("Motor", "Python 3.13 (Chaquopy)")
-            DetailRow("App", "Kotlin · Jetpack Compose")
-            DetailRow("Datos", "SQLite local")
-            DetailRow("Paquete", "com.indagalab.agentos")
-            DetailRow("Android mínimo", "8 (API 26)")
-        }
-        FilledTonalButton(
-            onClick = {
-                runCatching {
-                    ctx.startActivity(
-                        Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/DiegoFernandoLojanTenesaca/indaga-agentOS"))
-                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-                    )
-                }
-            },
-            modifier = Modifier.fillMaxWidth().height(50.dp),
-        ) { Text("Ver en GitHub") }
-    }
+    ) { contenido() }
 }
 
-// ---------- componentes ----------
 @Composable
 private fun StatusPill(running: Boolean) {
     val c = if (running) Green else MaterialTheme.colorScheme.outline
@@ -766,56 +618,6 @@ private fun StatusPill(running: Boolean) {
 }
 
 @Composable
-private fun CapabilityChip(cap: Capability, onClick: () -> Unit) {
-    val tint = if (cap.ready) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
-    Surface(
-        onClick = onClick,
-        shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-    ) {
-        Row(
-            Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Icon(cap.icon, null, tint = tint, modifier = Modifier.size(18.dp))
-            Text(cap.label, style = MaterialTheme.typography.bodyMedium)
-            if (!cap.ready) {
-                Surface(color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.18f), shape = RoundedCornerShape(50)) {
-                    Text(
-                        "Pronto",
-                        Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
-                        color = MaterialTheme.colorScheme.tertiary,
-                        style = MaterialTheme.typography.labelSmall,
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ProviderChip(name: String, on: Boolean, active: Boolean = false) {
-    val c = if (on) Green else MaterialTheme.colorScheme.outline
-    val accent = MaterialTheme.colorScheme.primary
-    Surface(
-        color = if (active) accent.copy(alpha = 0.20f) else c.copy(alpha = 0.14f),
-        shape = RoundedCornerShape(50),
-        border = if (active) BorderStroke(1.dp, accent) else null,
-    ) {
-        Row(
-            Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            Box(Modifier.size(7.dp).clip(CircleShape).background(if (active) accent else c))
-            Text(name, color = if (active) accent else c, style = MaterialTheme.typography.labelLarge)
-            if (active) Text("· activo", color = accent, style = MaterialTheme.typography.labelSmall)
-        }
-    }
-}
-
-@Composable
 private fun StatsCard(s: JSONObject) {
     Card(
         Modifier.fillMaxWidth(),
@@ -827,7 +629,7 @@ private fun StatsCard(s: JSONObject) {
             horizontalArrangement = Arrangement.SpaceAround,
         ) {
             StatItem(s.optString("provider", "—").ifBlank { "—" }, "Proveedor")
-            StatItem(fmtUptime(s.optInt("uptime_s", 0)), "Activo")
+            StatItem(duracion(s.optLong("uptime_s", 0)), "Activo")
             StatItem(s.optInt("tokens", 0).toString(), "Tokens")
             StatItem(s.optInt("requests", 0).toString(), "Pedidos")
         }
@@ -842,52 +644,11 @@ private fun StatItem(value: String, label: String) {
     }
 }
 
-private fun fmtUptime(s: Int): String = when {
-    s <= 0 -> "—"
-    s < 60 -> "${s}s"
-    s < 3600 -> "${s / 60}m"
-    else -> "${s / 3600}h ${(s % 3600) / 60}m"
-}
-
 @Composable
 private fun SectionCard(title: String, icon: ImageVector, content: @Composable () -> Unit) {
-    Card(
-        Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-    ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-                Text(title, style = MaterialTheme.typography.titleMedium)
-            }
-            content()
-        }
-    }
+    PixelWindow(title = title, icon = icon, content = content)
 }
 
-@Composable
-private fun DetailRow(label: String, value: String) {
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(value, style = MaterialTheme.typography.bodyMedium)
-    }
-}
-
-@Composable
-private fun FeatureLine(icon: ImageVector, title: String, body: String) {
-    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.Top) {
-        Box(Modifier.size(34.dp).clip(RoundedCornerShape(9.dp)).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)), contentAlignment = Alignment.Center) {
-            Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
-        }
-        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(title, style = MaterialTheme.typography.titleSmall)
-            Text(body, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-    }
-}
-
-// ---------- bienvenida / onboarding ----------
 @Composable
 private fun WelcomeScreen(onStart: () -> Unit) {
     var show by remember { mutableStateOf(false) }
@@ -895,55 +656,60 @@ private fun WelcomeScreen(onStart: () -> Unit) {
     val permLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
     ) { onStart() }
-    val infinite = rememberInfiniteTransition(label = "float")
-    val floatY by infinite.animateFloat(
-        initialValue = 0f, targetValue = -12f,
-        animationSpec = infiniteRepeatable(tween(1900), RepeatMode.Reverse), label = "y",
+    val infinite = rememberInfiniteTransition(label = "welcome")
+    val flota by infinite.animateFloat(
+        initialValue = 0f, targetValue = -1f,
+        animationSpec = infiniteRepeatable(tween(1900), RepeatMode.Reverse), label = "flota",
+    )
+    val brillo by infinite.animateFloat(
+        initialValue = 0f, targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(2600), RepeatMode.Reverse), label = "brillo",
     )
     val feats = listOf(
-        Triple(Lucide.Bot, "IA conversacional", "Las mejores IAs, gratis"),
-        Triple(Lucide.ShieldCheck, "Privado · sin Google", "Corre en tu propio dispositivo"),
-        Triple(Lucide.Zap, "Superpoderes", "Cámara, GPS, recordatorios y más"),
+        Triple(Lucide.Bot, "Agentes que trabajan solos", "Notas, listas, agenda y avisos, en su oficina"),
+        Triple(Lucide.ShieldCheck, "Sin Google y sin nube obligatoria", "El modelo puede correr dentro del propio teléfono"),
+        Triple(Lucide.Zap, "Con los sentidos del teléfono", "Cámara, ubicación, SMS, batería y llamadas"),
     )
 
-    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+    Box(
+        Modifier.fillMaxSize().background(
+            // El mismo degradado de la sala: la bienvenida y la pantalla de
+            // inicio tienen que parecer el mismo sitio.
+            Brush.verticalGradient(listOf(PARED, MaterialTheme.colorScheme.background)),
+        ),
+    ) {
         Column(
             Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()
-                .verticalScroll(rememberScrollState()).padding(28.dp),
+                .verticalScroll(rememberScrollState()).padding(horizontal = 26.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            Spacer(Modifier.height(44.dp))
-            AnimatedVisibility(show, enter = fadeIn(tween(800)) + scaleIn(initialScale = 0.6f, animationSpec = tween(800))) {
-                Image(
-                    painter = painterResource(R.mipmap.ic_launcher),
-                    contentDescription = null,
-                    modifier = Modifier.size(118.dp).offset(y = floatY.dp).clip(RoundedCornerShape(30.dp)),
+            Spacer(Modifier.height(28.dp))
+            AnimatedVisibility(show, enter = fadeIn(tween(800)) + scaleIn(initialScale = 0.75f, animationSpec = tween(800))) {
+                PortadaPixel(flota, brillo, Modifier.fillMaxWidth().height(232.dp))
+            }
+            AnimatedVisibility(show, enter = fadeIn(tween(700, 250))) {
+                Text(
+                    "Convierte este teléfono en un equipo de agentes que trabaja " +
+                        "solo. Tú le hablas por Telegram.",
+                    style = MaterialTheme.typography.bodyLarge,
+                    textAlign = TextAlign.Center,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.78f),
                 )
             }
-            AnimatedVisibility(show, enter = fadeIn(tween(700, 200)) + slideInVertically { it / 3 }) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("AgentOS", style = MaterialTheme.typography.headlineLarge)
-                    Text(
-                        "Tu agente de IA personal,\n24/7 en tu teléfono, por Telegram.",
-                        style = MaterialTheme.typography.bodyLarge,
-                        textAlign = TextAlign.Center,
-                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f),
-                    )
-                }
-            }
-            Spacer(Modifier.size(12.dp))
+            Spacer(Modifier.size(6.dp))
             feats.forEachIndexed { i, (icon, t, s) ->
-                AnimatedVisibility(show, enter = fadeIn(tween(600, 350 + i * 160)) + slideInHorizontally { it / 3 }) {
+                AnimatedVisibility(show, enter = fadeIn(tween(600, 400 + i * 150)) + slideInHorizontally { it / 3 }) {
                     WelcomeFeature(icon, t, s)
                 }
             }
-            Spacer(Modifier.height(44.dp))
-            AnimatedVisibility(show, enter = fadeIn(tween(700, 850)) + slideInVertically { it / 2 }) {
+            Spacer(Modifier.height(26.dp))
+            AnimatedVisibility(show, enter = fadeIn(tween(700, 900)) + slideInVertically { it / 2 }) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
-                        "Al comenzar, la app pedirá permisos (cámara, ubicación, SMS, micrófono) " +
-                            "para darle superpoderes al agente. Tú decides cuáles conceder.",
+                        "Al comenzar te pedirá permisos (cámara, ubicación, SMS, micrófono): " +
+                            "son los sentidos del agente y tú decides cuáles le das. " +
+                            "Puedes cambiarlos después.",
                         style = MaterialTheme.typography.bodySmall,
                         textAlign = TextAlign.Center,
                         color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
@@ -965,16 +731,86 @@ private fun WelcomeScreen(onStart: () -> Unit) {
                             permLauncher.launch(perms)
                         },
                         modifier = Modifier.fillMaxWidth().height(56.dp),
+                        shape = RoundedCornerShape(10.dp),
                     ) {
-                        Text("Comenzar", style = MaterialTheme.typography.titleMedium)
+                        Text("Abrir la oficina", style = MaterialTheme.typography.titleMedium)
                     }
                     Text(
                         "by Indaga Lab",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
                     )
+                    Spacer(Modifier.height(18.dp))
                 }
             }
+        }
+    }
+}
+
+/**
+ * La portada: el robot de la sala sobre su plataforma y el rótulo AGENTOS.
+ *
+ * Se dibuja con los mismos sprites que la oficina en vez de con el PNG del
+ * icono. Así la primera pantalla ya enseña de qué va la app y no hay una
+ * imagen suelta que se quede vieja cuando el arte cambie.
+ */
+@Composable
+private fun PortadaPixel(flota: Float, brillo: Float, modifier: Modifier) {
+    val rotulo = remember { textoPixel("AGENTOS", ACENTO) }
+    Canvas(modifier) {
+        val cx = size.width / 2f
+        val esc = ((size.height * 0.40f) / SPRITE_ROBOT.h).toInt().coerceAtLeast(2)
+        val altoRobot = SPRITE_ROBOT.h * esc
+        val baseY = size.height * 0.60f
+        val subida = flota * (esc * 1.5f)
+
+        // Plataforma isométrica: el suelo de la oficina, visto de cerca.
+        val tileW = SPRITE_ROBOT.w * esc * 1.9f
+        val tileH = tileW / 2f
+        val centro = Offset(cx, baseY + tileH * 0.30f)
+        drawPath(
+            Path().apply {
+                val p = tileDiamond(centro, tileW, tileH)
+                moveTo(p[0].x, p[0].y); p.drop(1).forEach { lineTo(it.x, it.y) }; close()
+            },
+            SUELO_B,
+        )
+        drawPath(
+            Path().apply {
+                val p = tileDiamond(centro, tileW, tileH)
+                moveTo(p[0].x, p[0].y); p.drop(1).forEach { lineTo(it.x, it.y) }; close()
+            },
+            ACENTO.copy(alpha = 0.20f + brillo * 0.18f),
+            style = Stroke(width = esc.toFloat()),
+        )
+
+        // Sombra: encoge cuando el robot sube. Es lo que vende el flote.
+        drawOval(
+            color = Color.Black.copy(alpha = 0.35f),
+            topLeft = Offset(cx - tileW * (0.24f + flota * 0.05f), centro.y - tileH * 0.14f),
+            size = Size(tileW * (0.48f + flota * 0.10f), tileH * 0.28f),
+        )
+
+        drawSpriteFooted(SPRITE_ROBOT, Offset(cx, baseY + subida), esc)
+
+        // Dos chispas que orbitan al robot, del color de la marca.
+        listOf(-1f, 1f).forEachIndexed { i, lado ->
+            val y = baseY - altoRobot * (0.55f + 0.35f * if (i == 0) brillo else 1f - brillo)
+            drawRect(
+                ACENTO.copy(alpha = 0.25f + brillo * 0.5f),
+                topLeft = Offset(cx + lado * tileW * 0.34f, y),
+                size = Size(esc.toFloat(), esc.toFloat()),
+            )
+        }
+
+        // Rótulo, con el mismo alfabeto de píxeles que el letrero de la sala.
+        rotulo?.let {
+            val escT = ((size.width * 0.62f) / it.w).toInt().coerceAtLeast(1)
+            drawSprite(
+                it,
+                Offset(cx - it.w * escT / 2f, size.height - it.h * escT - esc * 2f),
+                escT,
+            )
         }
     }
 }
@@ -986,14 +822,17 @@ private fun WelcomeFeature(icon: ImageVector, title: String, subtitle: String) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
+        // Cuadrado con borde, no círculo: la app entera es pixel art y un
+        // círculo de Material aquí desentona.
         Box(
-            Modifier.size(44.dp).clip(CircleShape)
-                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)),
+            Modifier.size(44.dp).clip(RoundedCornerShape(8.dp))
+                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f))
+                .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f), RoundedCornerShape(8.dp)),
             contentAlignment = Alignment.Center,
         ) {
             Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
         }
-        Column {
+        Column(Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.titleMedium)
             Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
@@ -1158,5 +997,56 @@ private fun KeyGuideRow(g: KeyGuide, ctx: Context, onUse: (String) -> Unit) {
         }
         Text(g.limits, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(g.where, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+    }
+}
+
+
+/**
+ * Quién sale en la sala.
+ *
+ * Los skills instalados (los lee el loader sin ejecutarlos) más las capacidades
+ * que trae el núcleo. Antes era una lista fija de seis nombres inventados: la
+ * sala enseñaba lo mismo con el agente en marcha que parado.
+ */
+private val NUCLEO = listOf("telefono", "agenda", "web", "antirrobo", "notas", "listas")
+
+internal fun agentesDeLaSala(running: Boolean, ctx: Context? = null): List<Agente> {
+    // Quien acaba de recibir un mensaje está en su puesto, esté el bot en
+    // marcha o no: la conversación con él ES su tarea.
+    val conRecado = ctx?.let { Actividad.activos(it, System.currentTimeMillis()) }.orEmpty()
+    val instalados = runCatching {
+        val txt = Python.getInstance().getModule("jarvis").callAttr("skills").toString()
+        val arr = org.json.JSONArray(txt)
+        (0 until arr.length()).map { arr.getJSONObject(it) }
+            .map { it.optString("id").ifBlank { it.optString("name") } to it.optString("status") }
+    }.getOrDefault(emptyList())
+
+    // Los que el usuario se ha creado a mano. Van primero: son suyos.
+    //
+    // Uno recién creado no tiene nada que hacer todavía: hasta que no le pongas
+    // datos, documentos o instrucciones, se queda en la zona de descanso. Así
+    // de un vistazo se ve quién está configurado y quién no, y las oficinas
+    // salen con unos trabajando y otros con la silla vacía.
+    val propios = ctx?.let { c ->
+        com.indagalab.agentos.ui.pixel.Skins.propios(c).map { s ->
+            val ficha = Fichas.cargar(c, s.id)
+            val tieneTarea = ficha.fuentes.isNotEmpty() || ficha.documentos.isNotEmpty() ||
+                ficha.skills.isNotEmpty() || ficha.instrucciones.isNotBlank()
+            s.id to if (tieneTarea) "ok" else "skipped"
+        }
+    }.orEmpty()
+
+    val vistos = (instalados + propios).map { it.first }.toSet()
+    // El núcleo no se instala ni falla: o está trabajando o está durmiendo.
+    val nucleo = NUCLEO.filterNot { it in vistos }.map { it to "ok" }
+    val todos = propios + instalados + nucleo
+    return agentesDesde(
+        todos.map { (id, estado) -> id to if (id in conRecado) "ok" else estado },
+        agenteCorriendo = running,
+    ).map { a ->
+        // agentesDesde duerme a todos si el bot está parado; el que tiene
+        // recado se queda despierto igualmente.
+        if (a.nombre in conRecado && a.estado == Estado.DURMIENDO)
+            a.copy(estado = Estado.TRABAJANDO) else a
     }
 }
