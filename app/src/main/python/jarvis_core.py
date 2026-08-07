@@ -4,6 +4,10 @@ import os, sys, time, json, re, glob, base64, sqlite3, subprocess, threading, ha
 import urllib.request, urllib.parse, urllib.error
 import html as htmllib
 
+from core import registry  # comandos registrables sin tocar este archivo
+from core import router    # decide modelo local vs nube por tarea
+import bridge_client       # puente a Kotlin: hardware + inferencia local
+
 # AGENTOS_HOME lo inyecta la app (filesDir) como directorio escribible para
 # jarvis.db, fotos y audios. En Termux/escritorio cae al dir del módulo.
 HERE = os.environ.get("AGENTOS_HOME") or os.path.dirname(os.path.abspath(__file__))
@@ -46,25 +50,13 @@ def allowed_ids():
     return s
 
 # comandos que solo el dueno puede usar (controlan el telefono fisico)
-OWNER_ONLY = {"run", "foto", "selfie", "ubicacion", "bateria", "linterna", "diga", "escucha",
-              "vigilancia", "alarma", "antirobo", "copia", "pega", "baja", "agente"}
+# Permisos de los comandos que aún viven en la cadena de elif. Los ya migrados
+# al registro NO van aquí: su permiso lo declara `owner=` en @registry.command,
+# que es la única fuente de verdad para ellos (ver core/registry.py).
+OWNER_ONLY = {"run", "diga", "escucha",
+              "vigilancia", "alarma", "antirobo", "baja", "agente"}
 
-PROVIDERS = {
-    "groq":      {"url": "https://api.groq.com/openai/v1",      "key": "GROQ_API_KEY",      "model": "llama-3.3-70b-versatile"},
-    "cerebras":  {"url": "https://api.cerebras.ai/v1",          "key": "CEREBRAS_API_KEY",  "model": "llama3.1-8b"},
-    "mistral":   {"url": "https://api.mistral.ai/v1",           "key": "MISTRAL_API_KEY",   "model": "mistral-small-latest"},
-    "nvidia":    {"url": "https://integrate.api.nvidia.com/v1", "key": "NVIDIA_API_KEY",    "model": "meta/llama-3.3-70b-instruct"},
-    "sambanova": {"url": "https://api.sambanova.ai/v1",         "key": "SAMBANOVA_API_KEY", "model": "Meta-Llama-3.3-70B-Instruct"},
-    "gemini":    {"url": "https://generativelanguage.googleapis.com/v1beta/openai", "key": "GOOGLE_API_KEY", "model": "gemini-2.0-flash"},
-    "openrouter":{"url": "https://openrouter.ai/api/v1",        "key": "OPENROUTER_API_KEY","model": "meta-llama/llama-3.3-70b-instruct:free"},
-    # --- OpenAI-compatibles agregados 2026-05-30 ---
-    # cohere y ai21 verificados free; chutes y zai necesitan SALDO en la cuenta
-    # (devuelven 402/429 sin crédito) — quedan listos para keys con saldo.
-    "cohere":    {"url": "https://api.cohere.ai/compatibility/v1","key": "COHERE_API_KEY",  "model": "command-a-03-2025"},
-    "ai21":      {"url": "https://api.ai21.com/studio/v1",       "key": "AI21_API_KEY",     "model": "jamba-mini"},
-    "chutes":    {"url": "https://llm.chutes.ai/v1",             "key": "CHUTES_API_KEY",   "model": "deepseek-ai/DeepSeek-V3.2-TEE"},
-    "zai":       {"url": "https://api.z.ai/api/paas/v4",         "key": "ZAI_API_KEY",      "model": "glm-4.6"},
-}
+from core.proveedores import PROVIDERS
 FALLBACK = ["groq", "cerebras", "mistral", "nvidia", "sambanova", "cohere", "ai21"]
 VISION = {"provider": "groq", "model": "meta-llama/llama-4-scout-17b-16e-instruct"}
 MODES = {
@@ -117,18 +109,26 @@ def activity_map(days=182):
         return {}
 
 # ---------- LLM ----------
-def _post(url, key, payload, timeout=90):
-    req = urllib.request.Request(url, data=json.dumps(payload).encode(),
-            headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json", "User-Agent": UA})
+def _post(url, key, payload, timeout=90, headers=None):
+    cab = headers or {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
+    cab.setdefault("User-Agent", UA)
+    req = urllib.request.Request(url, data=json.dumps(payload).encode(), headers=cab)
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return json.loads(r.read())
 
 def call_raw(provider, messages, tools=None, model=None, max_tokens=1024):
+    from core import proveedores
     p = PROVIDERS[provider]; key = ENV.get(p["key"], "")
     if not key: raise RuntimeError(f"falta {p['key']}")
-    payload = {"model": model or p["model"], "messages": messages, "max_tokens": max_tokens, "temperature": 0.5}
-    if tools: payload["tools"] = tools
-    d = _post(p["url"] + "/chat/completions", key, payload)
+    url, cab, payload = proveedores.peticion(provider, key, messages, model, max_tokens, ENV)
+    if p.get("dialecto") == "anthropic":
+        # ponytail: sin tools en este dialecto todavía. llm() salta al
+        # siguiente proveedor en vez de romperse.
+        if tools: raise RuntimeError("anthropic: tool calling aún no traducido")
+    else:
+        payload["temperature"] = 0.5
+        if tools: payload["tools"] = tools
+    d = proveedores.a_formato_openai(provider, _post(url, key, payload, headers=cab))
     u = d.get("usage") or {}
     a = USAGE.setdefault(provider, {"req": 0, "in": 0, "out": 0})
     a["req"] += 1; a["in"] += u.get("prompt_tokens", 0); a["out"] += u.get("completion_tokens", 0)
@@ -151,6 +151,43 @@ def llm(messages):
     raise RuntimeError(f"todos fallaron ({err})")
 
 def sysprompt(): return MODES.get(STATE["mode"], MODES["normal"])
+
+# ---------- tareas cortas: modelo local o nube ----------
+_LOCAL_OK = {"visto": False, "disponible": False}
+
+def local_disponible(refrescar=False):
+    """¿Hay un .gguf cargable? Se cachea: preguntarlo en cada SMS sobra."""
+    if refrescar or not _LOCAL_OK["visto"]:
+        try:
+            info = bridge_client.llm_local_info()
+            _LOCAL_OK["disponible"] = bool(info.get("available"))
+        except Exception:
+            _LOCAL_OK["disponible"] = False
+        _LOCAL_OK["visto"] = True
+    return _LOCAL_OK["disponible"]
+
+
+def ia_tarea(tarea, texto):
+    """Ejecuta una tarea corta y sin historial (clasificar, extraer, resumir).
+
+    El router decide el destino (ver core/router.py); si el local falla, cae a
+    la nube sin avisar a nadie. Devuelve texto plano ya recortado.
+    """
+    msgs, maxt = router.prompt_para(tarea, texto)
+    dest, motivo = router.destino(
+        tarea, texto, hay_internet=True, local_disponible=local_disponible())
+
+    if dest == "local":
+        out = bridge_client.llm_local(msgs[0]["content"], msgs[1]["content"], maxt)
+        if out:
+            print("[ia_tarea] %s -> local (%s)" % (tarea, motivo))
+            return out.strip()
+        # el modelo dijo que no: se marca como no disponible para no reintentar
+        # en cada SMS que entre, y se sigue por la nube.
+        _LOCAL_OK["disponible"] = False
+        print("[ia_tarea] %s -> local falló, voy a la nube" % tarea)
+
+    return llm(msgs).strip()
 
 # ---------- Telegram ----------
 def tg(method, **params):
@@ -1043,6 +1080,18 @@ def handle(chat, uid, text):
         send(chat, f"🔒 Ese poder es solo del dueño. (Tu id: {chat} — el dueño puede autorizarte)"); return
     if not owner and cmd in ("permitir", "quitar", "briefing"):
         send(chat, "🔒 solo el dueño."); return
+    # Registro primero: aquí caen los skills y los comandos ya migrados. Lo que
+    # no esté registrado sigue por la cadena de elif de abajo, que se irá
+    # vaciando a medida que los comandos se muevan a skills/ (ver
+    # docs/PLAN-ARQUITECTURA-v0.3.md, pasos 2-3).
+    if registry.has(cmd):
+        ctx = {"chat": chat, "uid": uid, "arg": arg, "cmd": cmd, "owner": owner, "text": text}
+        try:
+            if not registry.run(cmd, ctx):
+                send(chat, "🔒 Ese poder es solo del dueño.")
+        except Exception as e:
+            send(chat, f"error en /{cmd}: {e}")
+        return
     if cmd in ("start", "help"): sendf(chat, HELP)
     elif cmd == "menu":
         send_kb(chat, "🤖 <b>JARVIS — Menú</b>\nElegí una opción:", menu_main(), parse_mode="HTML")
@@ -1085,21 +1134,6 @@ def handle(chat, uid, text):
             open(p, "wb").write(urllib.request.urlopen("https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=" + urllib.parse.quote(arg), timeout=20).read())
             send_photo(chat, p, "📱 " + arg)
         except Exception as e: send(chat, f"error qr: {e}")
-    elif cmd in ("foto", "selfie"):
-        cam = "1" if cmd == "selfie" else "0"; p = os.path.join(HERE, "cam.jpg")
-        r = sh(f"termux-camera-photo -c {cam} {p}", timeout=40)
-        if os.path.isfile(p) and os.path.getsize(p) > 0: send_photo(chat, shrink(p), "📸")
-        else: send(chat, f"no pude (permiso camara?): {r}")
-    elif cmd == "ubicacion":
-        send(chat, "📍 obteniendo GPS…")
-        r = sh("termux-location -p network", timeout=45) or sh("termux-location", timeout=45)
-        try:
-            j = json.loads(r); send(chat, f"📍 https://maps.google.com/?q={j.get('latitude')},{j.get('longitude')}")
-        except Exception: send(chat, f"ubicacion: {r or 'sin datos (activa GPS)'}")
-    elif cmd == "bateria":
-        try: j = json.loads(sh("termux-battery-status")); send(chat, f"🔋 {j.get('percentage')}% | {j.get('status')} | {round(j.get('temperature',0),1)}°C")
-        except Exception as e: send(chat, f"bateria: {e}")
-    elif cmd == "linterna": sh(f"termux-torch {'on' if arg=='on' else 'off'}"); send(chat, f"🔦 {arg or 'off'}")
     elif cmd == "diga":
         if not arg: send(chat, "uso: /diga <texto>"); return
         sh("termux-tts-speak %s" % json.dumps(clean_for_tts(arg), ensure_ascii=False), timeout=40); send(chat, "🔊 dicho")
@@ -1111,8 +1145,6 @@ def handle(chat, uid, text):
         sh(f"termux-microphone-record -l {secs} -f {f}", timeout=20); time.sleep(int(secs) + 2); sh("termux-microphone-record -q", timeout=10)
         if os.path.isfile(f): tg_file("sendAudio", {"chat_id": str(chat), "caption": "🎙️"}, [("audio", "rec.m4a", open(f, "rb").read(), "audio/mp4")])
         else: send(chat, "no se grabo")
-    elif cmd == "copia": sh("termux-clipboard-set %s" % json.dumps(arg, ensure_ascii=False)); send(chat, "📋 copiado")
-    elif cmd == "pega": send(chat, sh("termux-clipboard-get") or "(vacio)")
     elif cmd == "vigilancia":
         if arg == "stop" or VIG["on"]: VIG["on"] = False; send(chat, "📸 vigilancia detenida"); return
         secs = int(arg) if arg.isdigit() else 30
@@ -1849,6 +1881,25 @@ def main():
             print("net:", e); time.sleep(3)
         except Exception as e:
             print("loop:", e); time.sleep(2)
+
+# ---------- carga de skills ----------
+# Va al FINAL a propósito: los skills hacen `import jarvis_core as jc`, así que
+# el módulo tiene que estar completo antes de importarlos. Un skill que falle
+# se salta con su motivo; el agente arranca igual.
+def load_skills():
+    try:
+        from skills import loader
+        loader.load_all(env=ENV)
+        for linea in loader.summary():
+            print("[skill]", linea)
+        return loader.LOADED
+    except Exception as e:
+        print("skills: no se pudieron cargar:", e)
+        return []
+
+
+load_skills()
+
 
 if __name__ == "__main__":
     main()

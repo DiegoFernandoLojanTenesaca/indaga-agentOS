@@ -22,6 +22,44 @@ def _call(path, params=None, timeout=20):
         return r.read().decode("utf-8")
 
 
+def llm_local(system, user, max_tokens=32, timeout=90):
+    """Inferencia en el propio teléfono (llama.cpp vía el bridge Kotlin).
+
+    Devuelve el texto, o None si no hay modelo cargado / falla. Devolver None
+    en vez de lanzar es deliberado: quien llama sólo tiene que hacer fallback a
+    la nube, sin distinguir entre "no hay modelo" y "petó".
+
+    El timeout es generoso (90 s) porque la PRIMERA llamada incluye cargar el
+    modelo en RAM (medio giga); las siguientes van en ~1,4 s.
+    """
+    try:
+        raw = _call("/llm/local", {
+            "system": system, "text": user, "max_tokens": int(max_tokens),
+        }, timeout=timeout)
+        j = json.loads(raw)
+        return j.get("text") if j.get("ok") else None
+    except Exception as e:
+        print("llm_local:", e)
+        return None
+
+
+def llm_local_info(timeout=10):
+    """Estado del modelo local: si hay .gguf y si está cargado."""
+    try:
+        return json.loads(_call("/llm/local/info", timeout=timeout))
+    except Exception:
+        return {"available": False, "reason": "bridge no responde"}
+
+
+def llm_local_unload(timeout=15):
+    """Libera la RAM del modelo. Útil al parar el agente."""
+    try:
+        _call("/llm/local/unload", timeout=timeout)
+        return True
+    except Exception:
+        return False
+
+
 def termux_shim(cmd, timeout=120):
     try:
         parts = shlex.split(cmd)
