@@ -10,6 +10,7 @@
     <img src="https://img.shields.io/badge/Kotlin-2.0-7F52FF?logo=kotlin&logoColor=white" alt="Kotlin">
     <img src="https://img.shields.io/badge/Compose-Material_3-4285F4?logo=jetpackcompose&logoColor=white" alt="Jetpack Compose">
     <img src="https://img.shields.io/badge/Python-3.13_on--device-3776AB?logo=python&logoColor=white" alt="Python 3.13 (Chaquopy)">
+    <img src="https://img.shields.io/badge/llama.cpp-on--device-000000?logo=c%2B%2B&logoColor=white" alt="llama.cpp on-device">
     <img src="https://img.shields.io/badge/Telegram-Bot-26A5E4?logo=telegram&logoColor=white" alt="Telegram">
     <img src="https://img.shields.io/badge/Cero-Google-EA4335?logo=google&logoColor=white" alt="Sin Google">
     <img src="https://img.shields.io/badge/Estado-Beta-orange" alt="Beta">
@@ -22,7 +23,7 @@
 
 ---
 
-AgentOS mete un agente de IA en **Python embebido (Chaquopy / CPython 3.13)** dentro de una app Android nativa, corriendo **24/7 como servicio en primer plano**. Interactuás por **Telegram** — preguntás, controlás el teléfono, programás tareas, te avisa si te roban el celu. Multi-proveedor de IA (**Groq, Gemini, Cohere, Mistral, NVIDIA, SambaNova, OpenRouter, AI21**) con failover automático, todo corriendo **local en tu dispositivo**. minSdk 26 (Android 8+).
+AgentOS mete un agente de IA en **Python embebido (Chaquopy / CPython 3.13)** dentro de una app Android nativa, corriendo **24/7 como servicio en primer plano**. Interactuás por **Telegram** — preguntás, controlás el teléfono, programás tareas, te avisa si te roban el celu. Multi-proveedor de IA (**Groq, Gemini, Cohere, Mistral, NVIDIA, SambaNova, OpenRouter, AI21**) con failover automático, y también **modelo local por llama.cpp** para no depender de nadie. minSdk 26 (Android 8+).
 
 > **El nicho:** no competimos con los flagships con Google. Apuntamos al parque que **nadie atiende** — Huawei post-2019, ROMs de-Googled (LineageOS / GrapheneOS / e-OS), celulares chinos sin GMS. Enorme en LATAM. El ángulo no es *"para los que no tienen Android"* — es **"para los que no tienen Google"**.
 
@@ -31,6 +32,10 @@ AgentOS mete un agente de IA en **Python embebido (Chaquopy / CPython 3.13)** de
 | | Feature | Qué hace |
 |---|---|---|
 | 🤖 | **Motor de IA** | Multi-proveedor OpenAI-compatible: Groq, Gemini, Cohere, Mistral, NVIDIA, SambaNova, OpenRouter, AI21. **Failover automático** si uno se cae. Modos: normal, profe, coder, conciso. |
+| 🧩 | **Modelo local** | **llama.cpp compilado por JNI** dentro de la app: modelos GGUF corriendo sin internet ni API key. Medido en un Huawei P40: Qwen3 0.6B a **17-30 tok/s**. Con chat local propio en la app. |
+| 🎭 | **Pals** | Personalidades para el modelo local — un system prompt, un modelo recomendado y sus parámetros. Se importan gratis desde [PalsHub](https://palshub.ai) o los escribís vos como un `SKILL.md`. |
+| 🧱 | **Skills injertables** | Una carpeta con `SKILL.md` + `skill.py` añade comandos nuevos. Los del APK y los de `AGENTOS_HOME/skills`: **capacidades nuevas sin recompilar**. Un skill roto no tumba el arranque. |
+| 🏢 | **La sala de agentes** | La pantalla principal es un edificio en **pixel art isométrico** donde cada skill cargado es alguien trabajando. Deslizás entre plantas; los que no tienen tarea bajan a la piscina. |
 | 💬 | **Telegram** | Bot completo por long-polling (sin push de Google): teclados inline, notas de voz, fotos, PDFs, force-reply. |
 | 📱 | **Control del teléfono** | Cámara, GPS, SMS, llamadas, linterna, TTS, vibración, portapapeles, sensores, micrófono — vía **AndroidBridge** HTTP en `localhost:8765` (sin Termux). |
 | 🛡️ | **Antirrobo** | Detecta movimiento → toma selfie → la **IA identifica** si es el dueño o un intruso → manda **SMS + ubicación GPS** a tu contacto de emergencia. |
@@ -52,6 +57,7 @@ AgentOS mete un agente de IA en **Python embebido (Chaquopy / CPython 3.13)** de
 graph LR
     You["Vos (Telegram)"] -->|mensajes| Agent["AgentOS · Jarvis (Python)"]
     Agent -->|razonamiento| AI["Proveedor IA (Groq / Gemini / Cohere / ...)"]
+    Agent -->|sin internet| Local["llama.cpp on-device (GGUF)"]
     Agent -->|hardware| Bridge["AndroidBridge (Kotlin · localhost:8765)"]
     Agent -->|búsqueda, fetch| Web["Web APIs"]
     AI -->|tool calls| Agent
@@ -61,10 +67,14 @@ graph LR
 
 ```
 App Android (Kotlin + Jetpack Compose · Material 3)
+ ├─ ui/ — módulos (un módulo, una idea) tras un panel lateral
+ │   └─ ui/pixel/ — la sala de agentes: motor de canvas sin interpolación + sprites por código
+ ├─ llama/ — módulo nativo: llama.cpp por JNI, generate() y bench()
  └─ AgentService — Foreground Service (START_STICKY + wake lock + Watchdog + BootReceiver)
      ├─ Python embebido (Chaquopy / CPython 3.13)
      │   ├─ jarvis.py        — entrypoint: start / stop / info / get_logs
-     │   ├─ jarvis_core.py   — LLM multi-proveedor, loop Telegram, SQLite, scheduler, ~30 comandos
+     │   ├─ core/            — registry (el registro de comandos), router, proveedores, datos, telegram
+     │   ├─ skills/          — loader de */SKILL.md + skill.py; se autoregistran en el registry
      │   └─ bridge_client.py — traduce los comandos termux-* a llamadas HTTP al bridge
      └─ AndroidBridge (NanoHTTPD · 127.0.0.1:8765) → cámara · GPS · SMS · llamadas · TTS · sensores · mic
 ```
@@ -75,7 +85,7 @@ Package: `com.indagalab.agentos`. Cáscara Android inspirada en [SeekerClaw](htt
 
 ## Quick Start
 
-**Requisitos:** JDK 17 · Android SDK 35 · Python 3.13 (para Chaquopy `buildPython`)
+**Requisitos:** JDK 17 · Android SDK 35 · Python 3.13 (para Chaquopy `buildPython`) · NDK + CMake (el módulo `llama` compila llama.cpp; la primera build tarda)
 
 ```bash
 git clone https://github.com/DiegoFernandoLojanTenesaca/indaga-agentOS.git
@@ -85,9 +95,11 @@ echo "sdk.dir=$HOME/android-sdk" > local.properties     # ruta de tu SDK
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Abre la app → pestaña **Config** → pega tu **token de Telegram** ([@BotFather](https://t.me/BotFather)) + tus **API keys** (Groq, Gemini, etc. — la app te indica de dónde obtenerlas gratis) → **Guardar** → pestaña **Inicio** → **Iniciar agente**. El primer chat que le escriba al bot queda como **dueño** automáticamente.
+Abre la app → panel lateral (☰) → **Bot de Telegram** para el token ([@BotFather](https://t.me/BotFather)) y **Claves y variables** para tus API keys (la app te indica de dónde obtenerlas gratis) → **Guardar** → vuelve a **La sala** → **Iniciar agente**. El primer chat que le escriba al bot queda como **dueño** automáticamente.
 
-> Guía completa de montaje en otra PC: [`docs/SETUP.md`](docs/SETUP.md) · Diseño y plan por fases: [`ARCHITECTURE.md`](ARCHITECTURE.md)
+¿Sin API keys? Ve a **Modelo local**, descarga un GGUF y habla con él desde **Chat local**. No hace falta internet.
+
+> Montaje en otra PC: [`docs/SETUP.md`](docs/SETUP.md) · Diseño por fases: [`ARCHITECTURE.md`](ARCHITECTURE.md) · Plan v0.3: [`docs/PLAN-ARQUITECTURA-v0.3.md`](docs/PLAN-ARQUITECTURA-v0.3.md) · Modelos, voz y Pals: [`docs/PLAN-MODELOS-VOZ-PALS.md`](docs/PLAN-MODELOS-VOZ-PALS.md) · La sala: [`docs/UI-SALA-DE-AGENTES.md`](docs/UI-SALA-DE-AGENTES.md)
 
 > **Beta** — en desarrollo activo. Espera bordes ásperos y cambios.
 
@@ -102,7 +114,7 @@ AgentOS le da a una IA capacidades reales sobre tu teléfono — cámara, SMS, l
 
 ## Créditos
 
-Cáscara Android inspirada en [SeekerClaw](https://github.com/sepivip/SeekerClaw) (MIT) / OpenClaw. Runtime Python vía [Chaquopy](https://chaquo.com/chaquopy/). Bot **Jarvis** original sobre Termux, portado a AgentOS.
+Cáscara Android inspirada en [SeekerClaw](https://github.com/sepivip/SeekerClaw) (MIT) / OpenClaw. Runtime Python vía [Chaquopy](https://chaquo.com/chaquopy/). Inferencia local con [llama.cpp](https://github.com/ggml-org/llama.cpp) (MIT). Los Pals se importan de [PalsHub](https://palshub.ai) conservando la autoría de cada creador, y sólo los gratuitos. Bot **Jarvis** original sobre Termux, portado a AgentOS.
 
 ---
 

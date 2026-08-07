@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Marrón muy oscuro: el mismo fondo cálido de la sala de agentes. -->
-    <color name="ic_launcher_background">#1A1410</color>
+    <!-- Crema de la paleta Indaga. En oscuro el contorno negro del sprite se
+         fundía con el fondo y al robot se le comían brazos y piernas. -->
+    <color name="ic_launcher_background">#FFF7ED</color>
 </resources>
