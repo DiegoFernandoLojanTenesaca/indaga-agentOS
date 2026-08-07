@@ -69,6 +69,28 @@ class AndroidBridge(private val ctx: Context, port: Int = 8765) : NanoHTTPD("127
         return try {
             when (session.uri.trimEnd('/')) {
                 "/health" -> ok("""{"ok":true,"bridge":"AgentOS"}""")
+
+                // Inferencia local. Python decide CUÁNDO usarla (core/router.py);
+                // aquí sólo se ejecuta. Devuelve 503 si no hay modelo, para que
+                // el que llame caiga a la nube sin interpretar mensajes de error.
+                "/llm/local" -> {
+                    val texto = p("text").orEmpty()
+                    val system = p("system").orEmpty()
+                    val maxT = p("max_tokens")?.toIntOrNull() ?: 32
+                    val salida = com.indagalab.agentos.llm.LocalLlm.generar(ctx, system, texto, maxT)
+                    if (salida == null) {
+                        newFixedLengthResponse(
+                            Response.Status.SERVICE_UNAVAILABLE, "application/json",
+                            """{"ok":false,"error":"modelo local no disponible"}""",
+                        )
+                    } else {
+                        ok(JSONObject().put("ok", true).put("text", salida).toString())
+                    }
+                }
+                "/llm/local/info" -> ok(com.indagalab.agentos.llm.LocalLlm.info(ctx))
+                "/llm/local/unload" -> {
+                    com.indagalab.agentos.llm.LocalLlm.descargar(); ok("""{"ok":true}""")
+                }
                 "/battery" -> ok(batteryJson())
                 "/vibrate" -> { vibrate(p("ms")?.toLongOrNull() ?: 500L); ok("""{"ok":true}""") }
                 "/torch" -> { torch(p("on") == "true"); ok("""{"ok":true}""") }
