@@ -1,6 +1,7 @@
 package com.indagalab.agentos.llm
 
 import android.content.Context
+import android.net.ConnectivityManager
 import android.util.Log
 import org.json.JSONArray
 import org.json.JSONObject
@@ -93,6 +94,42 @@ object Catalogo {
                 .sortedBy { it.bytes }
         }.getOrDefault(emptyList())
     }
+
+    /**
+     * El modelo que recomendamos, y el único con números propios.
+     *
+     * No es "el mejor 0.6B" en abstracto: es el que se midió en un P40 Lite
+     * (Kirin 810, sin backend de GPU, todo por CPU) contra Llama 3.2 1B y
+     * Bonsai 1.7B. Ganó por goleada — 3× más rápido que el Llama siendo 40%
+     * más pequeño, y respondiendo en español (el Bonsai contestaba en
+     * vietnamita a prompts en español).
+     *
+     * Es exactamente el mismo archivo que sirve el catálogo de PocketPal, así
+     * que las cifras de abajo son comparables con las suyas.
+     */
+    object Recomendado {
+        val archivo = Archivo(
+            repo = "bartowski/Qwen_Qwen3-0.6B-GGUF",
+            nombre = "Qwen_Qwen3-0.6B-Q4_K_M.gguf",
+            bytes = 484_442_112L,
+        )
+        const val TITULO = "Qwen3 0.6B"
+        const val MEDIDO = "17-30 tok/s · 730 ms al primer token · español correcto"
+        const val DONDE = "Medido en un Huawei P40 Lite (Kirin 810), todo por CPU."
+    }
+
+    /** ¿Ya está descargado el recomendado? */
+    fun tieneRecomendado(ctx: Context): Boolean =
+        File(LocalLlm.modelsDir(ctx), Recomendado.archivo.nombre).exists()
+
+    /**
+     * ¿La red de ahora se paga por megas? Medio giga por datos móviles sin
+     * avisar no se hace. No distingue "wifi" de "no medida" a propósito: un
+     * móvil compartiendo internet también cuenta, y eso Android ya lo sabe.
+     */
+    fun redDePago(ctx: Context): Boolean =
+        (ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager)
+            ?.isActiveNetworkMetered ?: false
 
     /** Los .gguf que ya están en el teléfono. */
     fun instalados(ctx: Context): List<File> =

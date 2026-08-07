@@ -32,9 +32,9 @@ import java.io.File
  * El modelo se busca en `filesDir/models/`, cualquier fichero .gguf. (Ojo: no
  * escribir la ruta con comodín aquí — Kotlin anida los comentarios de bloque y
  * un `/` seguido de `*` dentro del KDoc se come el resto del archivo.)
- * No se descarga solo: el
- * usuario lo copia (por ADB o desde la app), porque medio giga por la red móvil
- * de alguien sin avisar no se hace.
+ * Nunca se descarga sin que alguien lo pida: medio giga por la red móvil de
+ * otro no se gasta a sus espaldas. Lo trae [Catalogo], desde la pantalla
+ * Modelo local.
  */
 object LocalLlm {
 
@@ -160,13 +160,12 @@ object LocalLlm {
         }.flowOn(Dispatchers.IO)
     }
 
-    /** Libera la RAM del modelo (medio giga). Al parar el agente, conviene. */
-    @Synchronized
     /**
      * Benchmark del motor: procesa [pp] tokens de prompt y genera [tg],
      * repetido [nr] veces. Devuelve la tabla que da llama.cpp, o null si el
      * modelo no carga. Bloquea varios segundos.
      */
+    @Synchronized
     fun bench(ctx: Context, pp: Int = 64, tg: Int = 32, pl: Int = 1, nr: Int = 1): String? {
         if (!cargar(ctx)) return null
         val e = motor ?: return null
@@ -222,6 +221,8 @@ object LocalLlm {
         }
     }
 
+    /** Libera la RAM del modelo (medio giga). Al parar el agente, conviene. */
+    @Synchronized
     fun descargar() {
         try { motor?.cleanUp() } catch (_: Throwable) {}
         rutaCargada = null

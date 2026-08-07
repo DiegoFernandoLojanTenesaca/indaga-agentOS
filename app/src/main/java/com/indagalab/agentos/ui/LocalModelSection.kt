@@ -42,6 +42,7 @@ import com.composables.icons.lucide.HardDrive
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Play
 import com.composables.icons.lucide.Search
+import com.composables.icons.lucide.Sparkles
 import com.composables.icons.lucide.Trash2
 import com.composables.icons.lucide.X
 import com.indagalab.agentos.llm.Catalogo
@@ -87,8 +88,8 @@ fun LocalModelSection() {
             val m = enUso
             if (m == null) {
                 Text(
-                    "No hay ningún modelo todavía. Búscate uno abajo: con 1 GB " +
-                        "libre y unos minutos, este teléfono responde sin internet.",
+                    "No hay ningún modelo todavía. Con el de abajo y unos " +
+                        "minutos, este teléfono responde sin internet ni API key.",
                     style = MaterialTheme.typography.bodyMedium,
                 )
             } else {
@@ -285,7 +286,55 @@ private fun BuscadorModelos(onCambio: () -> Unit) {
         }
     }
 
-    PixelWindow("Traer un modelo", icon = Lucide.Download) {
+    // El recomendado va primero y aparte: sin esto, la primera pantalla que ve
+    // alguien es una lista de 12 repos de Hugging Face con nombres como
+    // "Qwen_Qwen3-0.6B-IQ4_XS" y ninguna pista de cuál funciona en un teléfono.
+    if (!Catalogo.tieneRecomendado(ctx)) {
+        val rec = Catalogo.Recomendado
+        val dePago = remember { Catalogo.redDePago(ctx) }
+        PixelWindow("El modelo probado", icon = Lucide.Sparkles) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically) {
+                Text(rec.TITULO, style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary)
+                Text(Catalogo.peso(rec.archivo.bytes),
+                    style = MaterialTheme.typography.labelMedium,
+                    fontFamily = FontFamily.Monospace)
+            }
+            Text(rec.MEDIDO, style = MaterialTheme.typography.bodySmall)
+            Text(rec.DONDE, style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (dePago) {
+                Text(
+                    "Estás en una red que se paga por megas. Son " +
+                        "${Catalogo.peso(rec.archivo.bytes)}: mejor con wifi.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+            // El progreso se pinta aquí mismo mientras sea este modelo: mandarlo
+            // a la ventana de abajo obligaría a buscar dónde salió la barra.
+            if (descargando == rec.archivo.nombre) {
+                BarraDescarga(descargando!!, progreso, recibido) { cancelar = true }
+            } else {
+                Button(
+                    onClick = { bajar(rec.archivo.url, rec.archivo.nombre) },
+                    enabled = descargando == null,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+                ) {
+                    Icon(Lucide.Download, null, Modifier.size(17.dp))
+                    Text("  Descargar y activar")
+                }
+                Text(
+                    "Se activa solo al terminar. Si se corta, no deja nada a medias.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+
+    PixelWindow("Traer otro", icon = Lucide.Download) {
         Text(
             "Modelos GGUF de Hugging Face, ordenados por descargas. En un " +
                 "teléfono, cualquier cosa por encima de 2 GB va a ir a tirones: " +
@@ -309,36 +358,8 @@ private fun BuscadorModelos(onCambio: () -> Unit) {
             modifier = Modifier.fillMaxWidth(),
         )
 
-        descargando?.let { nombre ->
-            Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text(nombre, style = MaterialTheme.typography.labelSmall,
-                        fontFamily = FontFamily.Monospace, modifier = Modifier.weight(1f))
-                    Text(
-                        if (progreso > 0f) "${(progreso * 100).toInt()}%"
-                        else Catalogo.peso(recibido),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-                }
-                Box(
-                    Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(3.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant)
-                ) {
-                    Box(
-                        Modifier.fillMaxWidth(progreso.coerceIn(0f, 1f)).height(8.dp)
-                            .clip(RoundedCornerShape(3.dp))
-                            .background(MaterialTheme.colorScheme.primary)
-                    )
-                }
-                OutlinedButton(
-                    onClick = { cancelar = true },
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp),
-                ) {
-                    Icon(Lucide.X, null, Modifier.size(15.dp))
-                    Text("  Cancelar")
-                }
-            }
+        descargando?.let {
+            BarraDescarga(it, progreso, recibido) { cancelar = true }
         }
         if (aviso.isNotBlank() && descargando == null) {
             Text(aviso, style = MaterialTheme.typography.bodySmall,
@@ -442,6 +463,47 @@ private fun BuscadorModelos(onCambio: () -> Unit) {
         ) {
             Icon(Lucide.Download, null, Modifier.size(16.dp))
             Text("  Descargar")
+        }
+    }
+}
+
+/** Progreso de la descarga en curso. Aparece en la tarjeta del recomendado o
+ *  en el buscador, según de dónde haya salido. */
+@Composable
+private fun BarraDescarga(
+    nombre: String,
+    progreso: Float,
+    recibido: Long,
+    onCancelar: () -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(nombre, style = MaterialTheme.typography.labelSmall,
+                fontFamily = FontFamily.Monospace, modifier = Modifier.weight(1f))
+            // Sin Content-Length no hay porcentaje posible: se enseña lo que
+            // lleva bajado, que al menos demuestra que avanza.
+            Text(
+                if (progreso > 0f) "${(progreso * 100).toInt()}%" else Catalogo.peso(recibido),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
+        Box(
+            Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(3.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+        ) {
+            Box(
+                Modifier.fillMaxWidth(progreso.coerceIn(0f, 1f)).height(8.dp)
+                    .clip(RoundedCornerShape(3.dp))
+                    .background(MaterialTheme.colorScheme.primary)
+            )
+        }
+        OutlinedButton(
+            onClick = onCancelar,
+            modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp),
+        ) {
+            Icon(Lucide.X, null, Modifier.size(15.dp))
+            Text("  Cancelar")
         }
     }
 }
